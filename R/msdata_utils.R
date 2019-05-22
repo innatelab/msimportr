@@ -17,15 +17,18 @@ agg_protgroup_col <- function(data) {
 #' @export
 append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
                                    fix_protein_info = TRUE,
-                                   import_columns = NULL) {
+                                   import_columns = NULL, verbose = TRUE) {
+    if (verbose) message("Preparing msdata$protgroups data frame...")
     msdata_colgroups <- attr(msdata_wide, "column_groups")
     pg_df <- dplyr::select(msdata_wide, !!msdata_colgroups$protgroup) %>%
         dplyr::distinct() %>% dplyr::arrange(protgroup_id)
     # keep only protgroups with data
     intensity_dfnames <- str_subset(names(msdata), "intensities$")
     for (dfname in intensity_dfnames) {
+        if (verbose) message("Contstraining msdata$protgroups to protgroups found in ", dfname)
         pg_df <- dplyr::semi_join(pg_df, msdata[[dfname]])
     }
+    if (verbose) message(nrow(pg_df), " protgroup(s) found")
     if (fix_protein_info) {
         pg_df <- pg_df %>%
             dplyr::mutate(# fix ACs due to incorrect mqpar parse rules
@@ -66,13 +69,17 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
             for (fix_col in intersect(fix_cols, colnames(pg_df))) {
                 pg_mask <- !is.na(fixpg_df[[fix_col]]) & is.na(pg_df[[fix_col]])
                 if (any(pg_mask)) {
+                    if (verbose) message("Fixing ", sum(pg_mask), " protgroups$", fix_col, " using provided proteins_info")
                     pg_df[pg_mask, fix_col] <- fixpg_df[pg_mask, fix_col]
                 }
             }
             for (imp_col in import_columns) {
+                if (verbose) message("Importing ", imp_col, " from proteins_info")
                 pg_df[, imp_col] <- fixpg_df[[imp_col]]
             }
         }
+    } else {
+        proteins_df <- NULL
     }
     return(modifyList(msdata, list(protgroups = pg_df,
                                    protein2protgroup = protein2pg_df,
