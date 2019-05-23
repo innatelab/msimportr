@@ -85,3 +85,25 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
                                    protein2protgroup = protein2pg_df,
                                    proteins = proteins_df)))
 }
+
+#' @export
+mschannel_statistics <- function(msdata) {
+    res <- dplyr::left_join(tidyr::expand(dplyr::filter(msdata$protgroup_tagintensities, !is.na(protgroup_id)),
+                                          protgroup_id, msrun, mstag),
+                            dplyr::filter(msdata$protgroup_tagintensities, !is.na(protgroup_id)) %>%
+                            dplyr::select(protgroup_id, msrun, mstag, intensity)) %>%
+    dplyr::inner_join(dplyr::select(msdata$mschannels, msrun, mstag, mschannel) %>%
+                      dplyr::distinct()) %>%
+    dplyr::left_join(dplyr::select(msdata$protgroup_intensities, protgroup_id, msrun, ident_type)) %>%
+    #dplyr::group_by(protgroup_id, condition) %>% dplyr::filter(any(!is.na(intensity))) %>%
+    dplyr::group_by(mschannel, mstag, msrun) %>%
+    summarize(log2_intensity.mean = mean(log2(intensity[!is.na(intensity)])),
+              log2_intensity.median = median(log2(intensity[!is.na(intensity)])),
+              log2_intensity.sd = sd(log2(intensity[!is.na(intensity)])),
+              n = n(),
+              n_missing = sum(is.na(intensity)),
+              n_matching = sum(ident_type=="By matching", na.rm = TRUE),
+              n_msms = sum(ident_type=="By MS/MS", na.rm = TRUE)) %>%
+    dplyr::ungroup()
+}
+
