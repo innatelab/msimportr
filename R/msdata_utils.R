@@ -59,17 +59,16 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
             agg_cols <- c(agg_cols, import_columns)
         }
         fixpg_df <- dplyr::left_join(dplyr::select(pg_df, protgroup_id),
-                                     dplyr::arrange(proteins_df, protein_ac) %>%
-                                     dplyr::group_by(protgroup_id) %>%
+                                     dplyr::group_by(proteins_df, protgroup_id) %>%
                                      dplyr::summarise_at(agg_cols, agg_protgroup_col) %>%
                                      dplyr::ungroup())
         if (any(fixpg_df$protgroup_id != pg_df$protgroup_id)) {
             warning("Incorrect fixed protgroups info, skipping")
         } else {
-            for (fix_col in intersect(fix_cols, colnames(pg_df))) {
+            for (fix_col in intersect(names(fix_cols), colnames(pg_df))) {
                 pg_mask <- !is.na(fixpg_df[[fix_col]]) & is.na(pg_df[[fix_col]])
                 if (any(pg_mask)) {
-                    if (verbose) message("Fixing ", sum(pg_mask), " protgroups$", fix_col, " using provided proteins_info")
+                    if (verbose) message("Fixing ", sum(pg_mask), " ", fix_col, " using provided proteins_info")
                     pg_df[pg_mask, fix_col] <- fixpg_df[pg_mask, fix_col]
                 }
             }
