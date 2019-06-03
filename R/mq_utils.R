@@ -9,6 +9,7 @@ require(tidyr)
 require(stringr)
 require(quantreg)
 
+#' @importFrom rlang %||%
 #' @importFrom dplyr tibble
 #' @importFrom dplyr na_if starts_with matches row_number n n_distinct if_else case_when
 #' @importFrom stringr str_split str_detect str_replace

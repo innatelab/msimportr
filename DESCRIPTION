@@ -8,5 +8,5 @@ Description: MaxQuant output files (.txt tables) import and post-processing.
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
-Depends: dplyr, readr, tidyr, stringr, quantreg
+Depends: rlang, dplyr, readr, tidyr, stringr, quantreg
 RoxygenNote: 6.1.1
