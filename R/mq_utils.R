@@ -262,8 +262,8 @@ read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.
 read.MaxQuant.Peptides <- function(folder_path, file_name = 'peptides.txt',
                                    import_data = c(), nrows = Inf)
 {
-    peptides.df <- dplyr::read_tsv(file.path(folder_path, file_name), n_max = nrows,
-                                   col_types = dplyr::cols(
+    peptides.df <- readr::read_tsv(file.path(folder_path, file_name), n_max = nrows,
+                                   col_types = readr::cols(
                                         `Proteins` = "c",
                                         `Protein group IDs` = "c",
                                         `Mod. peptide IDs` = "c",
@@ -320,12 +320,12 @@ read.MaxQuant.Peptides <- function(folder_path, file_name = 'peptides.txt',
 #' @export
 read.MaxQuant.AllPeptides <- function( folder_path, file_name = 'allPeptides.txt', nrows = Inf )
 {
-    allPeptides.df <- read_tsv(file.path(folder_path, file_name ), n_max = nrows,
-                               col_types = cols(`Type` = "c",
-                                                `Raw file` = "c",
-                                                `Resolution` = "n"
-                               ),
-                               na = MaxQuant_NAs, guess_max = 20000L)
+    allPeptides.df <- readr::read_tsv(file.path(folder_path, file_name ), n_max = nrows,
+                                      col_types = readr::cols(`Type` = "c",
+                                                              `Raw file` = "c",
+                                                              `Resolution` = "n"
+                                      ),
+                                      na = MaxQuant_NAs, guess_max = 20000L)
     allPeptides.df <- dplyr::rename(allPeptides.df,
                                     pep_type = Type,
                                     raw_file = `Raw file`,
@@ -352,7 +352,7 @@ read.MaxQuant.AllPeptides <- function( folder_path, file_name = 'allPeptides.txt
 read.MaxQuant.Sites <- function(folder_path, file_name, nrows = Inf, modif = "Phospho (STY)",
                                 import_data = c())
 {
-    data.df <- read_tsv(file.path(folder_path, file_name),
+    data.df <- readr::read_tsv(file.path(folder_path, file_name),
                         col_names = TRUE, n_max = nrows,
                         col_types = readr::cols(`Protein group IDs` = readr::col_character(),
                                                 .default = readr::col_guess()),
