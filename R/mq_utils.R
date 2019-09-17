@@ -7,7 +7,6 @@ require(dplyr)
 require(readr)
 require(tidyr)
 require(stringr)
-require(quantreg)
 
 #' @importFrom rlang %||%
 #' @importFrom dplyr tibble
@@ -573,6 +572,7 @@ glm_corrected_intensities <- function(intensities.df,
         mod_mtx_attrs[names(attributes(mod_mtx))] <- attributes(mod_mtx)
         attributes(mod_mtx) <- mod_mtx_attrs
         #for (ltl in -6:1) { # try different scales
+        if (requireNamespace("quantreg")) {
         tryCatch({
             # FIXME GLM assumes one pepmod_id
             #glm_res <- glm(fla,
@@ -598,6 +598,7 @@ glm_corrected_intensities <- function(intensities.df,
             intensities.df$glm_status <- "success"
             #    break
         }, error = function(e) warning(e), finally = invisible())
+        }
         #}
     } else {
         intensities.df$glm_status <- "skipped"
