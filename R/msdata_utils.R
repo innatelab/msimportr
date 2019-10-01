@@ -80,9 +80,10 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
     } else {
         proteins_df <- NULL
     }
-    return(modifyList(msdata, list(protgroups = pg_df,
-                                   protein2protgroup = protein2pg_df,
-                                   proteins = proteins_df)))
+    msdata$protgroups <- pg_df
+    msdata$protein2protgroup <- protein2pg_df
+    msdata$proteins <- proteins_df
+    return (msdata)
 }
 
 #' @export
