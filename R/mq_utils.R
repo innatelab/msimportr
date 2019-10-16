@@ -279,7 +279,7 @@ read.MaxQuant.Peptides <- function(folder_path, file_name = 'peptides.txt',
                       is_shared_by_proteins = is.na(`Unique (Proteins)`) | !(`Unique (Proteins)` %in% c('yes', '+')))
     #message(paste0(colnames(peptides.df), collapse='\n'))
     res.df <- peptides.df %>%
-        dplyr::select(peptide_id, seq = Sequence, seq_len = Length, n_miscleavages = `Missed cleavages`,
+        dplyr::select(peptide_id, seq = Sequence, seq_len = Length, n_miscleaved = `Missed cleavages`,
                       nterm_window = `N-term cleavage window`, cterm_window = `C-term cleavage window`,
                       aa_before = `Amino acid before`, aa_after = `Amino acid after`,
                       aa_first = `First amino acid`, aa_last = `Last amino acid`,
