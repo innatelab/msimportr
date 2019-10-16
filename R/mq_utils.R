@@ -270,25 +270,28 @@ read.MaxQuant.Peptides <- function(folder_path, file_name = 'peptides.txt',
                                         `Charges` = "c",
                                         `Reverse` = "c",
                                         `Ratio H/L variability [%]` = "n"),
-                            na = MaxQuant_NAs, guess_max = 20000L) %>%
-        dplyr::mutate(peptide_id = row_number()-1L,
-                      is_reverse = !is.na(`Reverse`) & `Reverse` == '+',
-                      is_contaminant = !is.na(`Potential contaminant`) & `Potential contaminant` == '+',
-                      is_shared_by_groups = is.na(`Unique (Groups)`) | !(`Unique (Groups)` %in% c('yes', '+')),
-                      is_shared = is_shared_by_groups,
-                      is_shared_by_proteins = is.na(`Unique (Proteins)`) | !(`Unique (Proteins)` %in% c('yes', '+')))
-    #message(paste0(colnames(peptides.df), collapse='\n'))
-    res.df <- peptides.df %>%
-        dplyr::select(peptide_id, seq = Sequence, seq_len = Length, n_miscleaved = `Missed cleavages`,
-                      nterm_window = `N-term cleavage window`, cterm_window = `C-term cleavage window`,
-                      aa_before = `Amino acid before`, aa_after = `Amino acid after`,
-                      aa_first = `First amino acid`, aa_last = `Last amino acid`,
-                      protgroup_ids = `Protein group IDs`,
-                      pepmod_ids = `Mod. peptide IDs`,
-                      protein_acs = `Proteins`, lead_razor_protein_ac = `Leading razor protein`,
-                      start_pos = `Start position`, end_pos = `End position`,
-                      mass = Mass, charges = `Charges`, score = Score, PEP = PEP,
-                      is_reverse, is_contaminant, is_shared_by_groups, is_shared, is_shared_by_proteins)
+                                   na = MaxQuant_NAs, guess_max = 20000L)
+    col_renames <- c(seq = "Sequence", seq_len = "Length",
+                     n_miscleaved = "Missed cleavages",
+                     nterm_window = "N-term cleavage window", cterm_window = "C-term cleavage window",
+                     aa_before = "Amino acid before", aa_after = "Amino acid after",
+                     aa_first = "First amino acid", aa_last = "Last amino acid",
+                     protgroup_ids = "Protein group IDs",
+                     pepmod_ids = "Mod. peptide IDs",
+                     protein_acs = "Proteins", lead_razor_protein_ac = "Leading razor protein",
+                     start_pos = "Start position", end_pos = "End position",
+                     mass = "Mass", charges = "Charges", score = "Score", PEP = "PEP",
+                     is_reverse = "Reverse", is_contaminant = "Potential contaminant",
+                     is_group_unique = "Unique (Groups)",
+                     is_protein_unique = "Unique (Proteins)")
+    res.df <- dplyr::select(peptides.df, !!col_renames[col_renames %in% colnames(peptides.df)]) %>%    #message(paste0(colnames(peptides.df), collapse='\n'))
+        mutate(peptide_id = row_number()-1L,
+               is_reverse = replace_na(is_reverse, "") == "+",
+               is_contaminant = replace_na(is_contaminant, "") == "+",
+               is_shared_by_groups = !(replace_na(is_group_unique, "") %in% c('yes', '+')),
+               is_shared = is_shared_by_groups,
+               is_shared_by_proteins = !(replace_na(is_protein_unique, "") %in% c('yes', '+'))) %>%
+        select(-is_group_unique, -is_protein_unique)
     col_info <- list(peptide = colnames(res.df))
     if ('intensity' %in% import_data) {
         intensities.df <- dplyr::select(peptides.df, starts_with("Intensity")) %>%
