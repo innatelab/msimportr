@@ -213,8 +213,8 @@ read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.
                      "unique_razor_seqcov" = "Unique + razor sequence coverage [%]",
                      "is_contaminant" = "Potential contaminant", "is_reverse" = "Reverse")
     res.df <- dplyr::select(proteinGroups.df, !!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
-        dplyr::mutate(is_contaminant = !is.na(is_contaminant) & is_contaminant == '+',
-                      is_reverse = !is.na(is_reverse) & is_reverse == '+')
+        dplyr::mutate(is_contaminant = replace_na(is_contaminant, "") == '+',
+                      is_reverse = replace_na(is_reverse, "") == '+')
     col_info <- list(protgroup = colnames(res.df))
     if ('intensity' %in% import_data) {
         intensities.df <- proteinGroups.df %>% dplyr::select(starts_with("Intensity")) %>%
@@ -268,7 +268,7 @@ read.MaxQuant.Peptides <- function(folder_path, file_name = 'peptides.txt',
                                         `Mod. peptide IDs` = "c",
                                         `Leading razor protein` = "c",
                                         `Charges` = "c",
-                                        `Reverse` = "c",
+                                        `Reverse` = "c", `Potential contaminant` = "c",
                                         `Ratio H/L variability [%]` = "n"),
                                    na = MaxQuant_NAs, guess_max = 20000L)
     col_renames <- c(seq = "Sequence", seq_len = "Length",
@@ -357,11 +357,12 @@ read.MaxQuant.Sites <- function(folder_path, file_name, nrows = Inf, modif = "Ph
     data.df <- readr::read_tsv(file.path(folder_path, file_name),
                         col_names = TRUE, n_max = nrows,
                         col_types = readr::cols(`Protein group IDs` = readr::col_character(),
+						                        `Reverse` = "c", `Potential contaminant` = "c",
                                                 .default = readr::col_guess()),
                         na = MaxQuant_NAs, guess_max = 20000L)
     sites.df <- data.df %>%
-        dplyr::mutate(is_contaminant = !is.na(`Potential contaminant`) & `Potential contaminant` == '+',
-                      is_reverse = !is.na(`Reverse`) & `Reverse` == '+') %>%
+        dplyr::mutate(is_contaminant = replace_na(`Potential contaminant`, "") == '+',
+                      is_reverse = replace_na(`Reverse`, "") == '+') %>%
         dplyr::select(site_id = id,
                       protgroup_ids = `Protein group IDs`,
                       leading_protein_acs = `Leading proteins`,
@@ -434,7 +435,7 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
                                             `Peptide ID` = 'i', `Mod. peptide ID` = 'i', `Charge` = 'i',
                                              Type = 'c', `Raw file` = 'c', Experiment = 'c',
                                              Modifications = 'c', `Labeling State` = 'c',
-                                            `Reverse` = "c",
+                                            `Reverse` = "c", `Potential contaminant` = "c",
                                              .default = readr::col_guess()),
                             na = MaxQuant_NAs, guess_max = guess_max)
 
@@ -479,8 +480,8 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
                                  msrun = factor(msrun),
                                  raw_file = factor(raw_file),
                                  ident_type = factor(ident_type),
-                                 is_contaminant = !is.na(is_contaminant) & is_contaminant == '+',
-                                 is_reverse = !is.na(is_reverse) & is_reverse == '+')
+                                 is_contaminant = replace_na(is_contaminant, "") == '+',
+                                 is_reverse = replace_na(is_reverse, "") == '+')
     return ( evidence.df )
 }
 
