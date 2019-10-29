@@ -737,9 +737,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
 
     # summarize intensities for pepmodstate_id X msrun pair (there could be multiple ones)
     message('Reshaping, summarizing & weighting pepmodstate intensities...')
-    pms_intensities_long.df <- tidyr::gather(evidence.df, mstag, intensity, starts_with("intensity.")) %>%
-        dplyr::mutate(mstag = factor(str_replace(mstag, "intensity\\.", ""),
-                                     levels = levels(mschannels.df$mstag))) %>%
+    pms_intensities_long.df <- tidyr::pivot_longer(evidence.df, starts_with("intensity"), names_to="mstag", values_to="intensity", names_prefix="intensity.") %>%
+        dplyr::mutate(mstag = factor(mstag, levels = levels(mschannels.df$mstag))) %>%
         dplyr::inner_join(dplyr::select(mschannels.df, msrun, mstag, mschannel)) %>%
         dplyr::group_by(pepmod_id, pepmodstate_id, msrun, mstag, mschannel) %>%
         dplyr::summarise(weight = weighted.mean(intensity, abs(1/mass_error_ppm)^0.5),
@@ -766,10 +765,9 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                             pepmod = 'pepmod_id',
                             protgroup = 'protgroup_ids',
                             stop('Unsupported glm.context ', glm_context))
-    pms_full_intensities_long.df <-
-        dplyr::filter(pms_full_intensities_long.df, mstag != 'Sum')
+    pms_full_intensities_long_glm.df <- dplyr::filter(pms_full_intensities_long.df, mstag != 'Sum')
     pms_full_intensities_long_glm.df <- if (!correct_ratios) {
-      dplyr::mutate(pms_full_intensities_long.df,
+      dplyr::mutate(pms_full_intensities_long_glm.df,
                     intensity_fixed = intensity,
                     intensity_corr = NA_real_,
                     intensity_glm = NA_real_,
@@ -784,8 +782,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         parallel::clusterExport(cl=multidplyr_cluster, c("glm.max_factor", "glm.reldelta_range", "glm.max_npepmods", "min_intensity"),
                                 envir=environment())
         distr.df <- switch(glm_context,
-                           pepmod = multidplyr::partition(pms_full_intensities_long.df, pepmod_id, msprotocol, cluster=multidplyr_cluster),
-                           protgroup = multidplyr::partition(pms_full_intensities_long.df, protgroup_ids, msprotocol, cluster=multidplyr_cluster)) %>%
+                           pepmod = multidplyr::partition(pms_full_intensities_long_glm.df, pepmod_id, msprotocol, cluster=multidplyr_cluster),
+                           protgroup = multidplyr::partition(pms_full_intensities_long_glm.df, protgroup_ids, msprotocol, cluster=multidplyr_cluster)) %>%
         #multidplyr::partition_(pms_full_intensities_long.df, c(glm_group_col, "msprotocol"), cluster=multidplyr_cluster) %>%
         dplyr::do({glm_corrected_intensities(., glm_max_factor = glm.max_factor,
                                              glm_reldelta_range = glm.reldelta_range,
@@ -794,7 +792,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         message("Collecting GLM results")
         dplyr::collect(distr.df)
     } else {
-        dplyr::group_by(pms_full_intensities_long.df, !!glm_group_col, msprotocol) %>%
+        dplyr::group_by(pms_full_intensities_long_glm.df, !!glm_group_col, msprotocol) %>%
             dplyr::do({glm_corrected_intensities(., glm_max_factor = glm.max_factor, glm_reldelta_range = glm.reldelta_range,
                                                  max_npepmods = glm.max_npepmods, min_intensity=min_intensity)})
     }
@@ -960,16 +958,14 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         intensities.df <- full_intensities_long.df %>% dplyr::filter(observed) %>%
             dplyr::mutate( mstag = factor( mstag, levels = as.character(intensity_columns.df$mstag) ) )
     } else if (evidence_msobj == 'msrun') {
-        fullest.df <- tidyr::gather(full_intensities_long.df, mod, val, starts_with("intensity")) %>%
-            dplyr::mutate(mod = str_replace(mod, "intensity", ""),
-                          intensity = interaction(mod, mstag, lex.order = TRUE, sep='.')) %>%
-            dplyr::filter(mstag != 'Sum' | mod == "") %>%
-            dplyr::select(-mod, -mschannel, -mstag)
-        intensities.df <- tidyr::spread(fullest.df, intensity, val, sep = "")
+        intensities.df <- full_intensities_long.df %>% ungroup() %>% select(-mschannel) %>%
+          tidyr::pivot_wider(id_cols=c("pepmod_id", "pepmodstate_id", "msrun"),
+                             names_from=mstag,
+                             values_from=starts_with("intensity"), names_sep=".")
     }
     ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmod_id, msrun, ident_type)) %>%
         dplyr::mutate(has_ident = TRUE) %>%
-        tidyr::spread(ident_type, has_ident, sep=".")
+        tidyr::pivot_wider(names_from=ident_type, values_from=has_ident, names_prefix="ident_type.")
     intensities.df <- dplyr::left_join(intensities.df, ident_types.df) %>%
         dplyr::mutate_at(vars(starts_with("ident_type")), ~!is.na(.x))
 
