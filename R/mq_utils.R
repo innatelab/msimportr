@@ -167,13 +167,13 @@ read.MaxQuant <- function(filename, layout = c("wide", "long"),
         res <- rename(res, !!rename_cols)
         quant.columns.full_list <- lapply(measures.fixed, function(mes) subset(quant.columns.df,measure_fixed==mes)$colname_fixed)
         names(quant.columns.full_list) <- measures.fixed
-        res <- reshape(res, direction = 'long',
-                       idvar = row_id_cols,
-                       varying = quant.columns.full_list,
-                       v.names = names(quant.columns.full_list),
-                       timevar = 'mschannel',
-                       times = sort(unique(quant.columns.df$mschannel)),
-                       sep = '.')
+        ratio_cols <- str_c("ratio.", ratio_columns_sel.df$suffix)
+        res <- tidyr::pivot_longer(select(res, !!row_id_cols, !!quant.columns.full_list),
+                                   cols=cols(ratio_cols),
+                                   names_to=c('.value', 'mschannel'),
+                                   names_pattern="(.+)\\.(.+)")
+        # v.names = names(quant.columns.full_list)
+        #times = sort(unique(quant.columns.df$mschannel))
         res <- inner_join(res, channels.df) %>% mutate(mschannel = NULL) # add mstags and msrun info
         # fix NA
         for (mes in measures.fixed) {
@@ -987,13 +987,9 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         ratios.df <- ratios.df %>% dplyr::mutate_at(ratio_columns_sel.df$new_name, zero2na)
         if (evidence_msobj == 'mschannel') {
             message( 'Converting ratios to long format...' )
-            ratios.df <- reshape(ratios.df, direction = 'long',
-                                 idvar = id_cols,
-                                 #varying = ratio_columns_sel.df$new_name,
-                                 v.names = 'ratio',
-                                 timevar = 'ratio_type',
-                                 times = ratio_columns_sel.df$suffix,
-                                 sep = '.') %>%
+            ratio_cols <- str_c("ratio.", ratio_columns_sel.df$suffix)
+            ratios.df <- tidyr::pivot_longer(select(ratios.df, !!id_cols, !!ratio_cols), cols=cols(ratio_cols),
+                                             names_to='ratio_type', names_prefix="ratio.") %>%
                 dplyr::inner_join(dplyr::select(ratio_columns_sel.df, suffix, type, mstag_nom, mstag_denom),
                                   by = c("ratio_type" = "suffix"))
         }
