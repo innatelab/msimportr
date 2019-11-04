@@ -159,7 +159,7 @@ read.MaxQuant <- function(filename, layout = c("wide", "long"),
         summarise_at(quant.columns, max) %>%
         dplyr::ungroup()
 
-    if ( match.arg( layout ) == 'long' ) {
+    if (match.arg(layout) == 'long') {
         quant.columns.df$exists <- quant.columns.df$colname %in% colnames(res)
         res[, subset(quant.columns.df,!exists)$colname ] <- NA # add missing column names to make it reshapeable
         rename_cols <- quant.columns.df$colname
@@ -986,7 +986,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         # fix NA
         ratios.df <- ratios.df %>% dplyr::mutate_at(ratio_columns_sel.df$new_name, zero2na)
         if (evidence_msobj == 'mschannel') {
-            message( 'Converting ratios to long format...' )
+            message('Converting ratios to long format...')
             ratio_cols <- str_c("ratio.", ratio_columns_sel.df$suffix)
             ratios.df <- tidyr::pivot_longer(select(ratios.df, !!id_cols, !!ratio_cols), cols=cols(ratio_cols),
                                              names_to='ratio_type', names_prefix="ratio.") %>%
@@ -994,7 +994,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                                   by = c("ratio_type" = "suffix"))
         }
     } else {
-        message( 'No channel ratios')
+        message('No channel ratios')
         ratios.df <- NULL
     }
     protgroup_ids <- pepmods.df$protgroup_ids %>% unique()
@@ -1002,14 +1002,14 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
     protgroups2protgroup.df <- tibble(protgroup_ids = rep.int(protgroup_ids, sapply(protgroups2protgroup.list, length)),
                                       protgroup_id = as.integer(unlist(protgroups2protgroup.list)))
     res <- list(pepmods = pepmods.df,
-                 protgroups2protgroup = protgroups2protgroup.df,
-                 raw_files = msruns.df,
-                 mschannels = mschannels.df,
-                 peaks = peaks.df)
+                protgroups2protgroup = protgroups2protgroup.df,
+                raw_files = msruns.df,
+                mschannels = mschannels.df,
+                peaks = peaks.df)
     res[[paste0(evidence_pepobj, "_intensities")]] <- intensities.df
     res[[paste0(evidence_pepobj, "_ratios")]] <- ratios.df
     if (evidence_pepobj == "pepmodstate") {
-      res$pepmodstates <- pepmodstates.df
+        res$pepmodstates <- pepmodstates.df
     }
     return (res)
 }
