@@ -731,7 +731,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                           is_full_quant = !is.na(Matrix::rowSums(intensities.mtx > 0.0))) %>%
         dplyr::rename(!!intens_cols)
 
-    message( 'Extracting pepmod states...' )
+    message('Extracting pepmod states...')
     pepmodstates.df <- dplyr::select(evidence.df, protgroup_ids, pepmodstate_id, pepmod_id, charge) %>% dplyr::distinct() %>%
       dplyr::arrange(pepmodstate_id)
 
@@ -817,7 +817,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                         intensity_glm_reldelta = intensity_glm/intensity - 1.0,
                         intensity_corr_reldelta = intensity_corr/intensity - 1.0)
 
-    message( 'Extracting pepmod information...' )
+    message('Extracting pepmod information...')
     pepmodXmsrun_stats.df <- evidence.df %>% dplyr::group_by(protgroup_ids, pepmod_id, msrun) %>%
         dplyr::summarize(n_charges = n_distinct(charge),
                          n_evidences = n_distinct(evidence_id),
@@ -956,7 +956,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
     if (evidence_msobj == 'mschannel') {
         #print(str(intensities.df))
         intensities.df <- full_intensities_long.df %>% dplyr::filter(observed) %>%
-            dplyr::mutate( mstag = factor( mstag, levels = as.character(intensity_columns.df$mstag) ) )
+            dplyr::mutate(mstag = factor(mstag, levels = as.character(intensity_columns.df$mstag)))
     } else if (evidence_msobj == 'msrun') {
         intensities.df <- full_intensities_long.df %>% ungroup() %>% select(-mschannel) %>%
           tidyr::pivot_wider(id_cols=c("pepmod_id", "pepmodstate_id", "msrun"),
