@@ -664,7 +664,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
     message("Extracting MS runs and MS channels info...")
     ilabels <- factor(c("H", "M", "L", "F", 'Sum'), ordered = TRUE,
                       levels = c("H", "M", "L", "F", 'Sum'))
-    intensity_columns.df <- expand.grid(measure = 'intensity', mstag = ilabels) %>%
+    intensity_columns.df <- crossing(measure = 'intensity', mstag = ilabels) %>%
         mutate(old_name = paste0('Intensity ', mstag),
                new_name = paste0(measure, '.', mstag),
                type = case_when(mstag == 'Sum' ~ 'aggregate',
@@ -674,9 +674,9 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         dplyr::mutate(type = factor(type)) %>%
         dplyr::arrange(mstag)
     ilabels <- intensity_columns.df$mstag # restrict to the labels actually used
-    msruns.df <- evidence.df %>% dplyr::select(msrun, raw_file) %>% dplyr::distinct()
-    mschannels.df <- expand.grid(raw_file = msruns.df$raw_file,
-                                 mstag = ilabels) %>%
+    msruns.df <- dplyr::select(evidence.df, msrun, raw_file) %>% dplyr::distinct()
+    mschannels.df <- crossing(raw_file = msruns.df$raw_file,
+                              mstag = ilabels) %>%
         dplyr::inner_join(msruns.df) %>%
         dplyr::mutate(
             mschannel = interaction(msrun, mstag, drop=TRUE, lex.order=TRUE, sep='_'),
@@ -873,10 +873,10 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
       .[ . %in% colnames(evidence.df) ]
     peaks.df <- evidence.df %>% dplyr::select(!!peak_columns) %>% dplyr::distinct()
 
-    ratio_columns.df <- expand.grid(measure = 'ratio',
-                                    mstag_nom = unique(dplyr::filter(intensity_columns.df, type == 'measured')$mstag),
-                                    mstag_denom = unique(dplyr::filter(intensity_columns.df, type == 'measured')$mstag),
-                                    type = c('', 'normalized', 'shift')) %>%
+    ratio_columns.df <- crossing(measure = 'ratio',
+                                 mstag_nom = unique(dplyr::filter(intensity_columns.df, type == 'measured')$mstag),
+                                 mstag_denom = unique(dplyr::filter(intensity_columns.df, type == 'measured')$mstag),
+                                 type = c('', 'normalized', 'shift')) %>%
         dplyr::filter(("ratio" %in% import_data) & mstag_nom != mstag_denom) %>%
         dplyr::mutate(old_name = str_replace(paste0('Ratio ', mstag_nom, '/', mstag_denom, ' ', type), '\\s$', ''),
                       inverted_old_name = str_replace(paste0('Ratio ', mstag_denom, '/', mstag_nom, ' ', type), '\\s$', ''),
