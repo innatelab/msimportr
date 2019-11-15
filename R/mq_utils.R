@@ -739,8 +739,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
     message('Reshaping, summarizing & weighting pepmodstate intensities...')
     pms_intensities_long.df <- tidyr::pivot_longer(evidence.df, starts_with("intensity"), names_to="mstag", values_to="intensity", names_prefix="intensity.") %>%
         dplyr::mutate(mstag = factor(mstag, levels = levels(mschannels.df$mstag))) %>%
-        dplyr::inner_join(dplyr::select(mschannels.df, msrun, mstag, mschannel)) %>%
-        dplyr::group_by(pepmod_id, pepmodstate_id, msrun, mstag, mschannel) %>%
+        dplyr::inner_join(dplyr::select(mschannels.df, msrun, raw_file, mstag, mschannel)) %>%
+        dplyr::group_by(pepmod_id, pepmodstate_id, msrun, raw_file, mstag, mschannel) %>%
         dplyr::summarise(weight = weighted.mean(intensity, abs(1/mass_error_ppm)^0.5),
                          intensity = sum(intensity, na.rm=TRUE)) %>%
         dplyr::group_by(pepmod_id, mschannel) %>%
@@ -750,8 +750,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
 
     message('Expanding intensities data.frame for every pepmod state and mschannel...')
     pms_full_intensities_long.df <- tidyr::expand(pms_intensities_long.df,
-                                                  mschannel, pepmodstate_id) %>%
-        dplyr::left_join(dplyr::select(mschannels.df, mschannel, msrun, one_of(c("mstag", "msprotocol")))) %>%
+                                                  nesting(raw_file, mschannel), pepmodstate_id) %>%
+        dplyr::left_join(dplyr::select(mschannels.df, mschannel, msrun, raw_file, one_of(c("mstag", "msprotocol")))) %>%
         dplyr::left_join(pepmodstates.df) %>%
         dplyr::left_join(pms_intensities_long.df) %>%
         dplyr::mutate(observed = !is.na(intensity) & intensity > 0,
@@ -802,8 +802,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
 
     if (evidence_pepobj == "pepmod") {
       message('Summing intensities of different charges...')
-      full_intensities_long.df <- dplyr::group_by(pms_full_intensities_long_glm.df, pepmod_id, msrun) %>%
-          dplyr::group_by(pepmod_id, msrun, mschannel, mstag) %>%
+      full_intensities_long.df <- pms_full_intensities_long_glm.df %>%
+          dplyr::group_by(pepmod_id, msrun, raw_file, mschannel, mstag) %>%
           dplyr::summarise(intensity = sum(intensity, na.rm=TRUE),
                            intensity_glm = sum(intensity_glm, na.rm=TRUE),
                            intensity_corr = sum(intensity_corr, na.rm=TRUE))
@@ -818,7 +818,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                         intensity_corr_reldelta = intensity_corr/intensity - 1.0)
 
     message('Extracting pepmod information...')
-    pepmodXmsrun_stats.df <- evidence.df %>% dplyr::group_by(protgroup_ids, pepmod_id, msrun) %>%
+    pepmodXmsrun_stats.df <- evidence.df %>% dplyr::group_by(protgroup_ids, pepmod_id, msrun, raw_file) %>%
         dplyr::summarize(n_charges = n_distinct(charge),
                          n_evidences = n_distinct(evidence_id),
                          n_quants = sum(n_quants > 0),
@@ -832,7 +832,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                       glm_status = factor(glm_status, levels=c("success", "skipped", "reverted", "failed")),
                       glm_method = factor(glm_method))
     pepmod_stats.df <- dplyr::group_by(pepmodXmsrun_stats.df, protgroup_ids, pepmod_id) %>%
-        dplyr::summarise(n_msruns = n(),
+        dplyr::summarise(n_msruns = n(), # actually, raw_files
                          n_quant_msruns = sum(n_quants > 0),
                          n_full_quant_msruns = sum(n_full_quants > 0),
                          n_max_charges=max(n_charges),
@@ -859,7 +859,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                       is_shared_by_proteins = str_detect(protein_acs, stringr::fixed(';')))
 
     message( 'Extracting peaks information...' )
-    peak_columns <- c('pepmodstate_id', 'pepmod_id', 'charge', 'msrun', 'evidence_id', 'n_quants', 'is_full_quant',
+    peak_columns <- c('pepmodstate_id', 'pepmod_id', 'charge', 'msrun', 'raw_file', 'evidence_id', 'n_quants', 'is_full_quant',
                       # Carbamidomethyl (C) Probabilities, Oxidation (M) Probabilities, Carbamidomethyl (C) Score Diffs, Oxidation (M) Score Diffs, Acetyl (Protein N-term), Carbamidomethyl (C), Oxidation (M),
                       'ident_type', 'label_state', 'ms2_mz', 'mz', 'mass_da', 'resolution',
                       'delta_mz_ppm', 'delta_mz_da', 'mass_error_ppm', 'Mass Error [mDa]', 'Mass Error [Da]',
@@ -922,7 +922,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                 names(inverted_cols) <- ref_ratio_cols.df$trf_old_name[ref_ratio_cols.df$is_inverted]
                 pre_intensities.df$ref_intensity <- pre_intensities.df[[paste0("Intensity ", correct_by_ratio.ref_label)]]
 
-                agg_ratios.df <- pre_intensities.df %>% dplyr::select(pepmod_id, msrun, ref_intensity, starts_with("Ratio"), mass_error_ppm) %>%
+                agg_ratios.df <- pre_intensities.df %>% dplyr::select(pepmod_id, msrun, raw_file, ref_intensity, starts_with("Ratio"), mass_error_ppm) %>%
                     dplyr::mutate(ratio_weight = abs(1/mass_error_ppm)/sum(abs(1/mass_error_ppm), na.rm=TRUE)) %>%
                     dplyr::mutate_at(inverted_cols, ~ 1/.) %>%
                     dplyr::summarise_at(ref_ratio_cols.df$trf_old_name,
@@ -959,11 +959,11 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
             dplyr::mutate(mstag = factor(mstag, levels = as.character(intensity_columns.df$mstag)))
     } else if (evidence_msobj == 'msrun') {
         intensities.df <- full_intensities_long.df %>% ungroup() %>% select(-mschannel) %>%
-          tidyr::pivot_wider(id_cols=c("pepmod_id", "pepmodstate_id", "msrun"),
+          tidyr::pivot_wider(id_cols=c("pepmod_id", "pepmodstate_id", "msrun", "raw_file"),
                              names_from=mstag,
                              values_from=starts_with("intensity"), names_sep=".")
     }
-    ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmod_id, msrun, ident_type)) %>%
+    ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmod_id, msrun, raw_file, ident_type)) %>%
         dplyr::mutate(has_ident = TRUE) %>%
         tidyr::pivot_wider(names_from=ident_type, values_from=has_ident, names_prefix="ident_type.")
     intensities.df <- dplyr::left_join(intensities.df, ident_types.df) %>%
@@ -997,7 +997,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         message('No channel ratios')
         ratios.df <- NULL
     }
-    protgroup_ids <- pepmods.df$protgroup_ids %>% unique()
+    protgroup_ids <- unique(pepmods.df$protgroup_ids)
     protgroups2protgroup.list <- str_split(protgroup_ids, stringr::fixed(';'))
     protgroups2protgroup.df <- tibble(protgroup_ids = rep.int(protgroup_ids, sapply(protgroups2protgroup.list, length)),
                                       protgroup_id = as.integer(unlist(protgroups2protgroup.list)))
