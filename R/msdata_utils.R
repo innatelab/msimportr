@@ -1,7 +1,7 @@
 # utilities for preparing msdata list
 
 uniprot_fasta_extract_ac <- function(fasta_headers) {
-    str_replace_all(fasta_headers, "(^|;)(?:sp|tr)\\|([a-zA-Z0-9_-]+)\\|\\S+($|;)", "\\1\\2\\3")
+    str_replace_all(fasta_headers, "(^|;)(?:sp|tr)\\|([a-zA-Z0-9_-]+)\\|\\S+?(?=$|;)", "\\1\\2")
 }
 
 agg_protgroup_col <- function(data) {
