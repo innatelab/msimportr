@@ -207,10 +207,13 @@ read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.
                      "majority_protein_acs" = "Majority protein IDs",
                      "gene_names" = "Gene names", "protein_names" = "Protein names",
                      "fasta_headers" = "Fasta headers", "n_proteins" = "Number of proteins",
+                     "npeptides" = "Peptide counts (all)",
+                     "npeptides_unique_razor" = "Peptide counts (razor+unique)",
+                     "npeptides_unique" = "Peptide counts (unique)",
                      "score" = "Score", "q_value" = "Q-value",
                      "seqlen" = "Sequence length", "seqlens" = "Sequence lengths",
-                     "mol_weight_kDa" = "Mol. weight [kDa]", "seqcov" = "Sequence coverage [%]",
-                     "unique_razor_seqcov" = "Unique + razor sequence coverage [%]",
+                     "mol_weight_kDa" = "Mol. weight [kDa]",
+                     "seqcov" = "Sequence coverage [%]","unique_razor_seqcov" = "Unique + razor sequence coverage [%]",
                      "is_contaminant" = "Potential contaminant", "is_reverse" = "Reverse")
     res.df <- dplyr::select(proteinGroups.df, !!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
         dplyr::mutate(is_contaminant = replace_na(is_contaminant, "") == '+',
