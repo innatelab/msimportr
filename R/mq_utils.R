@@ -201,7 +201,7 @@ read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.
                                         nrows = Inf, import_data = c(), guess_max = min(10000L, nrows))
 {
     proteinGroups.df <- readr::read_tsv(file.path(folder_path, file_name), n_max = nrows,
-                                        col_types = readr::cols(`Fasta headers` = "c"),
+                                        col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
                                         na = MaxQuant_NAs, guess_max = guess_max)
     col_renames <- c("protgroup_id" = "id", "protein_acs" = "Protein IDs",
                      "majority_protein_acs" = "Majority protein IDs",
@@ -358,6 +358,7 @@ read.MaxQuant.Sites <- function(folder_path, file_name, nrows = Inf, modif = "Ph
                         col_names = TRUE, n_max = nrows,
                         col_types = readr::cols(`Protein group IDs` = readr::col_character(),
 						                        `Reverse` = "c", `Potential contaminant` = "c",
+                                                `id` = "i",
                                                 .default = readr::col_guess()),
                         na = MaxQuant_NAs, guess_max = 20000L)
     sites.df <- data.df %>%
