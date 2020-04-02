@@ -35,21 +35,30 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
                           protein_acs = uniprot_fasta_extract_ac(protein_acs),
                           majority_protein_acs = uniprot_fasta_extract_ac(majority_protein_acs))
     }
+    maybe_expand_collapsed_metric <- function(df, collapsed_col, separated_col=collapsed_col) {
+        if (!(collapsed_col %in% colnames(df))) return (tibble())
+        tmp_col <- str_c(separated_col, "_tmp")
+        res <- expand_collapsed(df, collapsed_col=collapsed_col, separated_col=tmp_col)
+        res[[separated_col]] = parse_integer(res[[tmp_col]])
+        res[[tmp_col]] <- NULL
+        return (res)
+    }
     protein2pg_df <- bind_cols(
         expand_collapsed(pg_df, collapsed_col="protein_acs", separated_col = "protein_ac", extra_cols = "protgroup_id") %>%
         dplyr::select(-protein_acs),
-        expand_collapsed(pg_df, collapsed_col="npeptides", separated_col = "npeptides_tmp"),
-        expand_collapsed(pg_df, collapsed_col="npeptides_unique", separated_col = "npeptides_unique_tmp"),
-        expand_collapsed(pg_df, collapsed_col="npeptides_unique_razor", separated_col = "npeptides_unique_razor_tmp")) %>%
-        mutate(npeptides = parse_integer(npeptides_tmp),
-               npeptides_unique = parse_integer(npeptides_unique_tmp),
-               npeptides_unique_razor = parse_integer(npeptides_unique_razor_tmp),
-               npeptides_razor = npeptides_unique_razor - npeptides_unique) %>%
-        dplyr::select(-ends_with("_tmp")) %>%
+        maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides"),
+        maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides_unique"),
+        maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides_unique_razor")) %>%
         dplyr::left_join(expand_protgroup_acs(pg_df, acs_col="majority_protein_acs", ac_col = "protein_ac") %>%
                          dplyr::mutate(is_majority = TRUE)) %>%
         dplyr::mutate(is_majority=replace_na(is_majority, FALSE)) %>%
-        dplyr::ungroup()
+        dplyr::ungroup() %>%
+        dplyr::select(-row_ix, -prot_ix)
+    if ("npeptides_unique_razor" %in% colnames(protein2pg_df) &&
+        "npeptides_unique" %in% colnames(protein2pg_df)) {
+        protein2pg_df <- mutate(protein2pg_df, npeptides_razor = npeptides_unique_razor - npeptides_unique)
+    }
+
     if (!is.null(proteins_info)) {
         proteins_df <- semi_join(proteins_info, protein2pg_df) %>%
             dplyr::left_join(dplyr::select(dplyr::filter(protein2pg_df, is_majority),
