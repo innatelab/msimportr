@@ -489,7 +489,7 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
     evidence.df <- dplyr::mutate(evidence.df,
                                  msrun = factor(msrun),
                                  raw_file = factor(raw_file),
-                                 ident_type = factor(ident_type),
+                                 ident_type = factor(ident_type, levels=c("ISO-MSMS", "MULTI-MSMS", "MSMS", "MULTI-SECPEP", "MULTI-MATCH", "MULTI-MATCH-MSMS")),
                                  is_contaminant = replace_na(is_contaminant, "") == '+',
                                  is_reverse = replace_na(is_reverse, "") == '+')
     return ( evidence.df )
@@ -973,11 +973,14 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                              names_from=mstag,
                              values_from=starts_with("intensity"), names_sep=".")
     }
-    ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmod_id, msrun, raw_file, ident_type)) %>%
-        dplyr::mutate(has_ident = TRUE) %>%
-        tidyr::pivot_wider(names_from=ident_type, values_from=has_ident, names_prefix="ident_type.")
-    intensities.df <- dplyr::left_join(intensities.df, ident_types.df) %>%
-        dplyr::mutate_at(vars(starts_with("ident_type")), ~!is.na(.x))
+    ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmodstate_id, msrun, raw_file, ident_type)) %>%
+        dplyr::mutate(ident_type_i = as_integer(ident_type)) %>%
+        dplyr::group_by(pepmodstate_id, msrun, raw_file) %>%
+        dplyr::summarise(ident_type_i = min(ident_type_i, na.rm = TRUE)) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(ident_type = factor(levels(peaks.df$ident_type)[ident_type_i], levels=levels(peaks.df$ident_type)),
+                      ident_type_i = NULL)
+    intensities.df <- dplyr::left_join(intensities.df, ident_types.df)
 
     ratio_columns_sel.df <- dplyr::filter(ratio_columns.df,
                                           mstag_nom < mstag_denom & mstag_denom != 'Sum')
