@@ -256,6 +256,12 @@ read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.
         res.df <- dplyr::bind_cols(res.df, ident_types.df)
         col_info$ident_type <- colnames(ident_types.df)
     }
+    if ('ms2_count' %in% import_data) {
+      ms2_counts.df <- proteinGroups.df %>% dplyr::select(starts_with("MS/MS count ")) %>%
+        gsub_columns("^MS/MS\\scount\\s", "ms2_count.")
+      res.df <- dplyr::bind_cols(res.df, ms2_counts.df)
+      col_info$ms2_count <- colnames(ms2_counts.df)
+    }
     attr(res.df, "column_groups") <- col_info
     return (res.df)
 }
