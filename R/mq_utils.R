@@ -761,7 +761,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
     message('Expanding intensities data.frame for every pepmod state and mschannel...')
     pms_full_intensities_long.df <- tidyr::expand(pms_intensities_long.df,
                                                   nesting(raw_file, mschannel), pepmodstate_id) %>%
-        dplyr::left_join(dplyr::select(mschannels.df, mschannel, msrun, raw_file, one_of(c("mstag", "msprotocol")))) %>%
+        dplyr::left_join(dplyr::select(mschannels.df, mschannel, msrun, raw_file, any_of(c("mstag", "msprotocol")))) %>%
         dplyr::left_join(pepmodstates.df) %>%
         dplyr::left_join(pms_intensities_long.df) %>%
         dplyr::mutate(observed = !is.na(intensity) & intensity > 0,
@@ -851,7 +851,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         dplyr::left_join(prediction.df)
 
     pepmods.df <- dplyr::select(evidence.df,
-                                one_of(c("pepmod_id", "peptide_id", "protgroup_ids",
+                                any_of(c("pepmod_id", "peptide_id", "protgroup_ids",
                                        "protein_acs", "lead_protein_acs", "lead_razor_protein_ac",
                                        "gene_names", "protein_names", "is_reverse", "is_contaminant",
                                        "seq", "seq_len", "count_K", "count_R", "modifs", "n_miscleaved",
