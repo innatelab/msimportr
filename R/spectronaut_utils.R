@@ -19,11 +19,11 @@ read.Spectronaut.ProteinsReport <- function(file, nrows = Inf, import_data = c()
                      "protein_descriptions" = "PG.ProteinDescriptions",
                      "q_value" = "PG.Qvalue")
     res.df <- dplyr::select(proteinGroups.df, !!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
-        mutate(protgroup_id = row_number() - 1L,
-               protein_acs = majority_protein_acs)
+        dplyr::mutate(protgroup_id = row_number() - 1L,
+                      protein_acs = majority_protein_acs)
     col_info <- list(protgroup = colnames(res.df))
     if ('quantity' %in% import_data) {
-        quantities.df <- proteinGroups.df %>% dplyr::select(matches("\\.PG\\.(Quantity|RunEvidenceCount|NrOfStrippedSequencesMeasured|NrOfStippedSequencesIdentified|NrOfPrecursorsIdentified)"))
+        quantities.df <- proteinGroups.df %>% dplyr::select(tidyselect::matches("\\.PG\\.(Quantity|RunEvidenceCount|NrOfStrippedSequencesMeasured|NrOfStippedSequencesIdentified|NrOfPrecursorsIdentified)"))
         res.df <- dplyr::bind_cols(res.df, quantities.df)
         col_info$quantity <- colnames(quantities.df)
     }
@@ -45,11 +45,11 @@ read.Spectronaut.PepmodstatesReport <- function(file, nrows = Inf, import_data =
                      "q_value" = "PG.Qvalue",
                      "pepmodstate_seq" = "EG.PrecursorId")
     res.df <- dplyr::select(proteinGroups.df, !!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
-        mutate(pepmodstate_id = row_number() - 1L,
-               protein_acs = majority_protein_acs) %>%
-        extract(pepmodstate_seq, c("pepmod_seq", "charge"), "_([^.]+)_\\.(\\d+)", remove=FALSE) %>%
-        mutate(charge = parse_integer(charge),
-               peptide_seq = str_remove_all(pepmod_seq, "\\[[^]]+\\]"))
+        dplyr::mutate(pepmodstate_id = row_number() - 1L,
+                      protein_acs = majority_protein_acs) %>%
+        tidyr::extract(pepmodstate_seq, c("pepmod_seq", "charge"), "_([^.]+)_\\.(\\d+)", remove=FALSE) %>%
+        dplyr::mutate(charge = parse_integer(charge),
+                      peptide_seq = str_remove_all(pepmod_seq, "\\[[^]]+\\]"))
     col_info <- list(pepmodstate = colnames(res.df))
     if ('pg_stats' %in% import_data) {
         pg_stats.df <- proteinGroups.df %>% dplyr::select(matches("\\.PG\\.(RunEvidenceCount|NrOfModifiedSequencesMeasured|NrOfModifiedSequencesIdentified|NrOfStrippedSequencesIdentified)"))
@@ -87,9 +87,9 @@ pivot_longer.Spectronaut.Metrics <- function(msdata.wide, pkey, colgroup) {
     cols <- colgroups[[colgroup]]
 
     quantitiy_prespec_df <- tibble(.name = cols) %>%
-      extract(.name, c("msrun_ix", "raw_file", ".value"), remove = FALSE,
-              "^\\[(\\d+)\\]\\s(.+)\\.PG\\.(.+)$") %>%
-      mutate(.value = SpectronautMetrics[.value])
+      tidyr::extract(.name, c("msrun_ix", "raw_file", ".value"), remove = FALSE,
+                     "^\\[(\\d+)\\]\\s(.+)\\.PG\\.(.+)$") %>%
+      dplyr::mutate(.value = SpectronautMetrics[.value])
 
     return (tidyr::pivot_longer_spec(
         dplyr::select(msdata.wide, !!pkey, !!cols),
