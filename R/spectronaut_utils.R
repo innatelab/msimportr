@@ -7,11 +7,11 @@ Spectronaut_NAs <- c("", "Filtered")
 
 
 #' @export
-read.Spectronaut.ProteinsReport <- function(file, nrows = Inf, import_data = c(), guess_max = min(10000L, nrows))
+read.Spectronaut.ProteinsReport <- function(file, nrows = Inf, import_data = c(), guess_max = min(10000L, nrows), delim=delim)
 {
-    proteinGroups.df <- readr::read_csv(file, n_max = nrows,
-                                        #col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
-                                        na = Spectronaut_NAs, guess_max = guess_max)
+    proteinGroups.df <- readr::read_delim(file, delim = delim, n_max = nrows,
+                                          #col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
+                                          na = Spectronaut_NAs, guess_max = guess_max)
     col_renames <- c("protgroup_sn_id" = "PG.ProteinGroups",
                      #"protein_acs" = "PG.UniProtIds",
                      "majority_protein_acs" = "PG.ProteinAccessions",
@@ -32,9 +32,9 @@ read.Spectronaut.ProteinsReport <- function(file, nrows = Inf, import_data = c()
 }
 
 #' @export
-read.Spectronaut.PepmodstatesReport <- function(file, nrows = Inf, import_data = c(), guess_max = min(10000L, nrows))
+read.Spectronaut.PepmodstatesReport <- function(file, nrows = Inf, import_data = c(), guess_max = min(10000L, nrows), delim=',')
 {
-    proteinGroups.df <- readr::read_csv(file, n_max = nrows,
+    proteinGroups.df <- readr::read_csv(file, delim = delim, n_max = nrows,
                                         #col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
                                         na = Spectronaut_NAs, guess_max = guess_max)
     col_renames <- c("protgroup_sn_id" = "PG.ProteinGroups",
