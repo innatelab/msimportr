@@ -121,7 +121,7 @@ mschannel_statistics <- function(msdata) {
     pg_idents_df <- msdata$protgroup_idents %||% msdata$protgroup_intensities %||% NULL
     if (!is.null(pg_idents_df)) {
         ident_stats <- dplyr::left_join(dplyr::filter(pg_idents_df, !is.na(protgroup_id)),
-            dplyr::select(msdata$mschannels, msrun, msrun_mq) %>% dplyr::distinct()) %>%
+            dplyr::select(msdata$mschannels, msrun, any_of("msrun_mq")) %>% dplyr::distinct()) %>%
             dplyr::group_by(msrun) %>%
         summarize(n_matching = sum(ident_type=="By matching", na.rm = TRUE),
                   n_msms = sum(ident_type=="By MS/MS", na.rm = TRUE)) %>%
