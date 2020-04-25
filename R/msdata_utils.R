@@ -134,6 +134,40 @@ mschannel_statistics <- function(msdata) {
 }
 
 #' @export
+msrun_statistics <- function(msdata) {
+  if (rlang::has_name(msdata, "protgroup_tagintensities")) {
+    warning("msdata contains `protgroup_tagintensities` data, mschannel_statistics() should be used instead")
+  }
+  res <- dplyr::left_join(tidyr::expand(dplyr::filter(msdata$protgroup_intensities, !is.na(protgroup_id)),
+                                        protgroup_id, msrun),
+                          dplyr::filter(msdata$protgroup_intensities, !is.na(protgroup_id)) %>%
+                            dplyr::select(protgroup_id, msrun, intensity)) %>%
+    dplyr::inner_join(dplyr::select(msdata$msruns, msrun) %>% dplyr::distinct()) %>%
+    #dplyr::group_by(protgroup_id, condition) %>% dplyr::filter(any(!is.na(intensity))) %>%
+    dplyr::group_by(msrun) %>%
+    summarize(log2_intensity.mean = mean(log2(intensity[!is.na(intensity)])),
+              log2_intensity.median = median(log2(intensity[!is.na(intensity)])),
+              log2_intensity.sd = sd(log2(intensity[!is.na(intensity)])),
+              n = n(),
+              n_missing = sum(is.na(intensity))) %>%
+    dplyr::ungroup()
+
+  pg_idents_df <- msdata$protgroup_idents %||% msdata$protgroup_intensities %||% NULL
+  if (!is.null(pg_idents_df)) {
+    ident_stats <- dplyr::left_join(dplyr::filter(pg_idents_df, !is.na(protgroup_id)),
+                                    dplyr::select(msdata$msruns, msrun, any_of("msrun_mq")) %>% dplyr::distinct()) %>%
+      dplyr::group_by(msrun) %>%
+      summarize(n_matching = sum(ident_type=="By matching", na.rm = TRUE),
+                n_msms = sum(ident_type=="By MS/MS", na.rm = TRUE)) %>%
+      dplyr::ungroup()
+    res <- left_join(res, ident_stats)
+  } else {
+    warning("No protgroup ident_type data found")
+  }
+  return (res)
+}
+
+#' @export
 # FIXME more checks/control over the columns of intensities_df/stats_df
 impute_intensities <- function(intensities_df, stats_df, log2_mean_offset=-1.8, log2_sd_scale=0.3){
     res <- dplyr::inner_join(intensities_df, stats_df) %>%
