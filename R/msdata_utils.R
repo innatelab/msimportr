@@ -134,14 +134,27 @@ mschannel_statistics <- function(msdata) {
 }
 
 #' @export
-msrun_statistics <- function(msdata) {
-  if (rlang::has_name(msdata, "protgroup_tagintensities")) {
-    warning("msdata contains `protgroup_tagintensities` data, mschannel_statistics() should be used instead")
+msrun_statistics <- function(msdata, obj="protgroup") {
+  objs_dfname <- str_c(obj, "s")
+  obj_idcol = str_c(obj, "_id")
+  if (!rlang::has_name(msdata, objs_dfname)) {
+    stop("msdata contains no `", objs_dfname, " data")
   }
-  res <- dplyr::left_join(tidyr::expand(dplyr::filter(msdata$protgroup_intensities, !is.na(protgroup_id)),
-                                        protgroup_id, msrun),
-                          dplyr::filter(msdata$protgroup_intensities, !is.na(protgroup_id)) %>%
-                            dplyr::select(protgroup_id, msrun, intensity)) %>%
+  objs_df = msdata[[objs_dfname]]
+  objs_df$object_id = objs_df[[obj_idcol]]
+  if (rlang::has_name(msdata, str_c(obj, "_tagintensities"))) {
+    warning("msdata contains `", obj, "_tagintensities` data, mschannel_statistics() should be used instead")
+  }
+  obj_intensities_dfname <- str_c(obj, "_intensities")
+  if (!rlang::has_name(msdata, obj_intensities_dfname)) {
+    warning("msdata contains no `", obj_intensities_dfname, "` data")
+  }
+  obj_intensities_df = msdata[[obj_intensities_dfname]]
+  obj_intensities_df$object_id = obj_intensities_df[[obj_idcol]]
+  res <- dplyr::left_join(tidyr::expand(dplyr::filter(obj_intensities_df, !is.na(object_id)),
+                                        object_id, msrun),
+                          dplyr::filter(obj_intensities_df, !is.na(object_id)) %>%
+                          dplyr::select(object_id, msrun, intensity)) %>%
     dplyr::inner_join(dplyr::select(msdata$msruns, msrun) %>% dplyr::distinct()) %>%
     #dplyr::group_by(protgroup_id, condition) %>% dplyr::filter(any(!is.na(intensity))) %>%
     dplyr::group_by(msrun) %>%
@@ -152,9 +165,15 @@ msrun_statistics <- function(msdata) {
               n_missing = sum(is.na(intensity))) %>%
     dplyr::ungroup()
 
-  pg_idents_df <- msdata$protgroup_idents %||% msdata$protgroup_intensities %||% NULL
-  if (!is.null(pg_idents_df)) {
-    ident_stats <- dplyr::left_join(dplyr::filter(pg_idents_df, !is.na(protgroup_id)),
+  obj_idents_dfname <- str_c(obj, "_idents")
+  if (rlang::has_name(msdata, obj_idents_dfname)) {
+    obj_idents_df <- msdata[[obj_idents_dfname]]
+    obj_idents_df$object_id = obj_idents_df[[obj_idcol]]
+  } else {
+    obj_idents_df <- obj_intensities_df
+  }
+  if (!is.null(obj_idents_df)) {
+    ident_stats <- dplyr::left_join(dplyr::filter(obj_idents_df, !is.na(object_id)),
                                     dplyr::select(msdata$msruns, msrun, any_of("msrun_mq")) %>% dplyr::distinct()) %>%
       dplyr::group_by(msrun) %>%
       summarize(n_matching = sum(ident_type=="By matching", na.rm = TRUE),
