@@ -196,5 +196,5 @@ impute_intensities <- function(intensities_df, stats_df, log2_mean_offset=-1.8, 
                                                   intensity)) %>%
         dplyr::ungroup()
     # don't take stats_df columns along
-    select(res, one_of(colnames(intensities_df)), intensity_imputed)
+    dplyr::select(res, one_of(colnames(intensities_df)), intensity_imputed)
 }
