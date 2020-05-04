@@ -854,7 +854,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                                 any_of(c("pepmod_id", "peptide_id", "protgroup_ids",
                                        "protein_acs", "lead_protein_acs", "lead_razor_protein_ac",
                                        "gene_names", "protein_names", "is_reverse", "is_contaminant",
-                                       "seq", "seq_len", "count_K", "count_R", "modifs", "n_miscleaved",
+                                       "mod_seq", "seq", "seq_len", "count_K", "count_R", "modifs", "n_miscleaved",
                                        # Carbamidomethyl (C) site IDs', Oxidation (M) site IDs
                                        "charge"))) %>%
         dplyr::distinct() %>%
