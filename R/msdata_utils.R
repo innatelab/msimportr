@@ -198,3 +198,29 @@ impute_intensities <- function(intensities_df, stats_df, log2_mean_offset=-1.8, 
     # don't take stats_df columns along
     dplyr::select(res, one_of(colnames(intensities_df)), intensity_imputed)
 }
+
+#' @export
+cluster_msprofiles <- function(msdata, msrun_stats, obj_col="pepmodstate_id", msrun_col="msrun", nclu=4) {
+  # create matrix of intensities
+  intensities.df <- tidyr::expand(msdata, !!!rlang::syms(c(obj_col, msrun_col))) %>%
+    dplyr::left_join(msdata, by=c(obj_col, msrun_col)) %>%
+    impute_intensities(msrun_stats) %>%
+    dplyr::arrange_at(c(obj_col, msrun_col))
+  intensities.mtx <- matrix(log2(intensities.df$intensity_imputed),
+                            ncol = n_distinct(intensities.df[[obj_col]]),
+                            dimnames = list(msrun = unique(intensities.df[[msrun_col]]),
+                                            object = unique(intensities.df[[obj_col]])))
+  obj.pca <- stats::prcomp(intensities.mtx, scale.=TRUE)
+  # create object feature matrix
+  obj.pca_featmtx <- obj.pca$rotation * crossprod(t(rep.int(1, nrow(obj.pca$rotation))),
+                                                  summary(obj.pca)$var)
+  
+  as.data.frame(obj.pca_featmtx) %>%
+    dplyr::mutate(!!obj_col := parse_integer(rownames(obj.pca_featmtx)),
+                  profile_cluster = stats::cutree(hclust(dist(obj.pca_featmtx), method="single"),
+                                        min(c(nclu, nrow(obj.pca_featmtx), ncol(obj.pca_featmtx))))) %>%
+    # FIXME per object
+    dplyr::group_by(profile_cluster) %>%
+    dplyr::mutate(nsimilar_profiles = n()) %>%
+    dplyr::ungroup()
+}
