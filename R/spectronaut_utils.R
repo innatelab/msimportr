@@ -34,9 +34,9 @@ read.Spectronaut.ProteinsReport <- function(file, nrows = Inf, import_data = c()
 #' @export
 read.Spectronaut.PepmodstatesReport <- function(file, nrows = Inf, import_data = c(), guess_max = min(10000L, nrows), delim=',')
 {
-    proteinGroups.df <- readr::read_csv(file, delim = delim, n_max = nrows,
-                                        #col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
-                                        na = Spectronaut_NAs, guess_max = guess_max)
+    proteinGroups.df <- readr::read_delim(file, delim = delim, n_max = nrows,
+                                          #col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
+                                          na = Spectronaut_NAs, guess_max = guess_max)
     col_renames <- c("protgroup_sn_id" = "PG.ProteinGroups",
                      #"protein_acs" = "PG.UniProtIds",
                      "majority_protein_acs" = "PG.ProteinAccessions",
@@ -44,7 +44,7 @@ read.Spectronaut.PepmodstatesReport <- function(file, nrows = Inf, import_data =
                      "protein_descriptions" = "PG.ProteinDescriptions",
                      "q_value" = "PG.Qvalue",
                      "pepmodstate_seq" = "EG.PrecursorId")
-    res.df <- dplyr::select(proteinGroups.df, !!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
+    res.df <- dplyr::select(proteinGroups.df, !!!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
         dplyr::mutate(pepmodstate_id = row_number() - 1L,
                       protein_acs = majority_protein_acs) %>%
         tidyr::extract(pepmodstate_seq, c("pepmod_seq", "charge"), "_([^.]+)_\\.(\\d+)", remove=FALSE) %>%
