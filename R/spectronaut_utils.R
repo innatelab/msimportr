@@ -86,14 +86,14 @@ pivot_longer.Spectronaut.Metrics <- function(msdata.wide, pkey, colgroup) {
     colgroups <- attr(msdata.wide, "column_groups")
     cols <- colgroups[[colgroup]]
 
-    quantitiy_prespec_df <- tibble(.name = cols) %>%
+    quantity_prespec_df <- tibble(.name = cols) %>%
       tidyr::extract(.name, c("msrun_ix", "raw_file", ".value"), remove = FALSE,
-                     "^\\[(\\d+)\\]\\s(.+)\\.PG\\.(.+)$") %>%
+                     "^\\[(\\d+)\\]\\s(.+)(?:\\.PG|\\.PEP)\\.(.+)$") %>%
       dplyr::mutate(.value = SpectronautMetrics[.value])
 
     return (tidyr::pivot_longer_spec(
         dplyr::select(msdata.wide, !!pkey, !!cols),
-        quantitiy_prespec_df) %>%
+        quantity_prespec_df) %>%
         dplyr::mutate(msrun_ix = parse_integer(msrun_ix)))
 }
 
