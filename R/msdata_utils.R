@@ -213,7 +213,7 @@ cluster_msprofiles <- function(msdata, msrun_stats, obj_col="pepmodstate_id", ms
   obj.pca <- stats::prcomp(intensities.mtx, scale.=TRUE)
   # create object feature matrix
   obj.pca_featmtx <- obj.pca$rotation * crossprod(t(rep.int(1, nrow(obj.pca$rotation))),
-                                                  summary(obj.pca)$var)
+                                                  summary(obj.pca)$importance[2,])
   
   tibble(!!obj_col := parse_integer(rownames(obj.pca_featmtx)),
          profile_cluster = stats::cutree(hclust(dist(obj.pca_featmtx), method="single"),
