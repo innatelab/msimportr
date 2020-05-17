@@ -206,6 +206,11 @@ cluster_msprofiles <- function(msdata, msrun_stats, obj_col="pepmodstate_id", ms
     dplyr::left_join(msdata, by=c(obj_col, msrun_col)) %>%
     impute_intensities(msrun_stats) %>%
     dplyr::arrange_at(c(obj_col, msrun_col))
+  if (n_distinct(intensities.df[[obj_col]]) == 1L) {
+    return(tibble(!!obj_col := unique(intensities.df[[obj_col]]),
+            profile_cluster = 1L,
+            nsimilar_profiles = 1L))
+  }
   intensities.mtx <- matrix(log2(intensities.df$intensity_imputed),
                             ncol = n_distinct(intensities.df[[obj_col]]),
                             dimnames = list(msrun = unique(intensities.df[[msrun_col]]),
