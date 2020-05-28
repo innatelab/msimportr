@@ -223,11 +223,16 @@ cluster_msprofiles <- function(msdata, msrun_stats, obj_col="pepmodstate_id", ms
   obj.pca_featmtx <- obj.pca$rotation * crossprod(t(rep.int(1, nrow(obj.pca$rotation))),
                                                   summary(obj.pca)$importance[2,])
   
-  tibble(!!obj_col := parse_integer(rownames(obj.pca_featmtx)),
-         profile_cluster = stats::cutree(hclust(dist(obj.pca_featmtx), method="single"),
-                                         min(c(nclu, nrow(obj.pca_featmtx), ncol(obj.pca_featmtx))))) %>%
-    # FIXME per object
-    dplyr::group_by(profile_cluster) %>%
-    dplyr::mutate(nsimilar_profiles = n()) %>%
-    dplyr::ungroup()
+  res <- tibble(!!obj_col := parse_integer(rownames(obj.pca_featmtx)),
+         tmp_profile_cluster = stats::cutree(hclust(dist(obj.pca_featmtx), method="single"),
+                                         min(c(nclu, nrow(obj.pca_featmtx), ncol(obj.pca_featmtx)))))
+  # assign profile_cluster indices from largest to smallest clusters
+  res_clusizes <- dplyr::group_by(res, tmp_profile_cluster) %>%
+    dplyr::summarise(nsimilar_profiles = n()) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(desc(nsimilar_profiles)) %>%
+    dplyr::mutate(profile_cluster = row_number())
+
+  return(inner_join(res, res_clusizes) %>%
+    dplyr::select(-tmp_profile_cluster))
 }
