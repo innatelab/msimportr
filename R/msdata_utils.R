@@ -43,12 +43,14 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
         res[[tmp_col]] <- NULL
         return (res)
     }
-    protein2pg_df <- bind_cols(
-        expand_collapsed(pg_df, collapsed_col="protein_acs", separated_col = "protein_ac", extra_cols = "protgroup_id") %>%
+    protein2pg_dfs <- list(
+      expand_collapsed(pg_df, collapsed_col="protein_acs", separated_col = "protein_ac", extra_cols = "protgroup_id") %>%
         dplyr::select(-protein_acs),
-        maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides"),
-        maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides_unique"),
-        maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides_unique_razor")) %>%
+      maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides"),
+      maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides_unique"),
+      maybe_expand_collapsed_metric(pg_df, collapsed_col="npeptides_unique_razor")
+    )
+    protein2pg_df <- bind_cols(protein2pg_dfs[sapply(protein2pg_dfs, nrow) > 0]) %>%
         dplyr::left_join(expand_protgroup_acs(pg_df, acs_col="majority_protein_acs", ac_col = "protein_ac") %>%
                          dplyr::mutate(is_majority = TRUE)) %>%
         dplyr::mutate(is_majority=replace_na(is_majority, FALSE)) %>%
@@ -56,7 +58,7 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
         dplyr::select(-row_ix, -prot_ix)
     if ("npeptides_unique_razor" %in% colnames(protein2pg_df) &&
         "npeptides_unique" %in% colnames(protein2pg_df)) {
-        protein2pg_df <- mutate(protein2pg_df, npeptides_razor = npeptides_unique_razor - npeptides_unique)
+        protein2pg_df <- dplyr::mutate(protein2pg_df, npeptides_razor = npeptides_unique_razor - npeptides_unique)
     }
 
     if (!is.null(proteins_info)) {
