@@ -672,7 +672,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         return (res)
     }
     message("Extracting MS runs and MS channels info...")
-    ilabels <- factor(c("H", "M", "L", "F", 'Sum'), ordered = TRUE,
+    ilabels <- factor(c("H", "M", "L", "F", 'Sum'),
                       levels = c("H", "M", "L", "F", 'Sum'))
     intensity_columns.df <- crossing(measure = 'intensity', mstag = ilabels) %>%
         mutate(old_name = paste0('Intensity ', mstag),
