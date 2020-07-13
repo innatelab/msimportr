@@ -193,7 +193,7 @@ msrun_statistics <- function(msdata, obj="protgroup") {
 impute_intensities <- function(intensities_df, stats_df, log2_mean_offset=-1.8, log2_sd_scale=0.3){
     res <- dplyr::inner_join(intensities_df, stats_df) %>%
         dplyr::mutate(intensity_imputed = if_else(is.na(intensity),
-                                                  2^(rnorm(n(), mean=log2_intensity.mean + log2_mean_offset,
+                                                  2^(rnorm(n(), mean=log2_intensity.mean + log2_intensity.sd * log2_mean_offset,
                                                                 sd=log2_intensity.sd * log2_sd_scale)),
                                                   intensity)) %>%
         dplyr::ungroup()
