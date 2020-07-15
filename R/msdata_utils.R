@@ -177,9 +177,11 @@ msrun_statistics <- function(msdata, obj="protgroup") {
   if (!is.null(obj_idents_df)) {
     ident_stats <- dplyr::left_join(dplyr::filter(obj_idents_df, !is.na(object_id)),
                                     dplyr::select(msdata$msruns, msrun, any_of("msrun_mq")) %>% dplyr::distinct()) %>%
+      dplyr::mutate(is_matching = ident_type %in% c("By matching", "MULTI-MATCH", "MULTI-MATCH-MSMS"),
+                    is_msms = ident_type %in% c("By MS/MS", "MULTI-MSMS", "ISO-MSMS", "MSMS", "MULTI-SECPEP")) %>%
       dplyr::group_by(msrun) %>%
-      summarize(n_matching = sum(ident_type=="By matching", na.rm = TRUE),
-                n_msms = sum(ident_type=="By MS/MS", na.rm = TRUE)) %>%
+      summarize(n_matching = n_distinct(object_id[is_matching], na.rm = TRUE),
+                n_msms = n_distinct(object_id[is_msms], na.rm = TRUE)) %>%
       dplyr::ungroup()
     res <- left_join(res, ident_stats)
   } else {
