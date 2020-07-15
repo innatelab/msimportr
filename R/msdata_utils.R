@@ -104,11 +104,24 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
 }
 
 #' @export
-mschannel_statistics <- function(msdata) {
-    res <- dplyr::left_join(tidyr::expand(dplyr::filter(msdata$protgroup_tagintensities, !is.na(protgroup_id)),
-                                     protgroup_id, msrun, mstag),
-                            dplyr::filter(msdata$protgroup_tagintensities, !is.na(protgroup_id)) %>%
-                            dplyr::select(protgroup_id, msrun, mstag, intensity)) %>%
+mschannel_statistics <- function(msdata, obj="protgroup") {
+    objs_dfname <- str_c(obj, "s")
+    obj_idcol = str_c(obj, "_id")
+    if (!rlang::has_name(msdata, objs_dfname)) {
+        stop("msdata contains no `", objs_dfname, " data")
+    }
+    objs_df = msdata[[objs_dfname]]
+    objs_df$object_id = objs_df[[obj_idcol]]
+    obj_tagintensities_dfname <- str_c(obj, "_tagintensities")
+    if (!rlang::has_name(msdata, obj_tagintensities_dfname)) {
+      stop("msdata contains no `", obj, "_tagintensities` data, msrun_statistics() should be used instead")
+    }
+    obj_tagintensities_df <- msdata[[obj_tagintensities_dfname]]
+    obj_tagintensities_df$object_id <- obj_tagintensities_df[[obj_idcol]]
+    res <- dplyr::left_join(tidyr::expand(dplyr::filter(obj_tagintensities_df, !is.na(object_id)),
+                                          object_id, msrun, mstag),
+                            dplyr::filter(obj_tagintensities_df, !is.na(object_id)) %>%
+                            dplyr::select(object_id, msrun, mstag, intensity)) %>%
     dplyr::inner_join(dplyr::select(msdata$mschannels, msrun, mstag, mschannel) %>%
                       dplyr::distinct()) %>%
     #dplyr::group_by(protgroup_id, condition) %>% dplyr::filter(any(!is.na(intensity))) %>%
@@ -120,17 +133,25 @@ mschannel_statistics <- function(msdata) {
               n_missing = sum(is.na(intensity))) %>%
     dplyr::ungroup()
 
-    pg_idents_df <- msdata$protgroup_idents %||% msdata$protgroup_intensities %||% NULL
-    if (!is.null(pg_idents_df)) {
-        ident_stats <- dplyr::left_join(dplyr::filter(pg_idents_df, !is.na(protgroup_id)),
-            dplyr::select(msdata$mschannels, msrun, any_of("msrun_mq")) %>% dplyr::distinct()) %>%
-            dplyr::group_by(msrun) %>%
-        summarize(n_matching = sum(ident_type=="By matching", na.rm = TRUE),
-                  n_msms = sum(ident_type=="By MS/MS", na.rm = TRUE)) %>%
-        dplyr::ungroup()
-        res <- left_join(res, ident_stats)
+    obj_idents_dfname <- str_c(obj, "_idents")
+    if (rlang::has_name(msdata, obj_idents_dfname)) {
+      obj_idents_df <- msdata[[obj_idents_dfname]]
+      obj_idents_df$object_id <- obj_idents_df[[obj_idcol]]
     } else {
-        warning("No protgroup ident_type data found")
+      obj_idents_df <- obj_tagintensities_df
+    }
+    if (!is.null(obj_idents_df)) {
+      ident_stats <- dplyr::left_join(dplyr::filter(obj_idents_df, !is.na(object_id)),
+                                      dplyr::select(msdata$mschannels, msrun, any_of("msrun_mq")) %>% dplyr::distinct()) %>%
+        dplyr::mutate(is_matching = ident_type %in% c("By matching", "MULTI-MATCH", "MULTI-MATCH-MSMS"),
+                      is_msms = ident_type %in% c("By MS/MS", "MULTI-MSMS", "ISO-MSMS", "MSMS", "MULTI-SECPEP")) %>%
+        dplyr::group_by(msrun) %>%
+        summarize(n_matching = n_distinct(object_id[is_matching], na.rm = TRUE),
+                  n_msms = n_distinct(object_id[is_msms], na.rm = TRUE)) %>%
+        dplyr::ungroup()
+      res <- left_join(res, ident_stats)
+    } else {
+      warning("No protgroup ident_type data found")
     }
     return (res)
 }
