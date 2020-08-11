@@ -210,10 +210,12 @@ read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.
                      "npeptides" = "Peptide counts (all)",
                      "npeptides_unique_razor" = "Peptide counts (razor+unique)",
                      "npeptides_unique" = "Peptide counts (unique)",
+                     "npeptides_mutated" = "Mutated peptide count",
                      "score" = "Score", "q_value" = "Q-value",
                      "seqlen" = "Sequence length", "seqlens" = "Sequence lengths",
                      "mol_weight_kDa" = "Mol. weight [kDa]",
                      "seqcov" = "Sequence coverage [%]","unique_razor_seqcov" = "Unique + razor sequence coverage [%]",
+                     "mutations" = "Mutation names",
                      "is_contaminant" = "Potential contaminant", "is_reverse" = "Reverse")
     res.df <- dplyr::select(proteinGroups.df, !!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
         dplyr::mutate(is_contaminant = replace_na(is_contaminant, "") == '+',
@@ -290,6 +292,7 @@ read.MaxQuant.Peptides <- function(folder_path, file_name = 'peptides.txt',
                      protein_acs = "Proteins", lead_razor_protein_ac = "Leading razor protein",
                      start_pos = "Start position", end_pos = "End position",
                      mass = "Mass", charges = "Charges", score = "Score", PEP = "PEP",
+                     is_mutated = "Mutated", mutations = "Mutation names",
                      is_reverse = "Reverse", is_contaminant = "Potential contaminant",
                      is_group_unique = "Unique (Groups)",
                      is_protein_unique = "Unique (Proteins)")
