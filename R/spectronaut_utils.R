@@ -34,35 +34,45 @@ read.Spectronaut.ProteinsReport <- function(file, nrows = Inf, import_data = c()
 #' @export
 read.Spectronaut.PepmodstatesReport <- function(file, nrows = Inf, import_data = c(), guess_max = min(10000L, nrows), delim=',')
 {
-    proteinGroups.df <- readr::read_delim(file, delim = delim, n_max = nrows,
-                                          #col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
-                                          na = Spectronaut_NAs, guess_max = guess_max)
+    report.df <- readr::read_delim(file, delim = delim, n_max = nrows,
+                                   #col_types = readr::cols(`Fasta headers` = "c", `id` = "i"),
+                                   na = Spectronaut_NAs, guess_max = guess_max)
     col_renames <- c("protgroup_sn_id" = "PG.ProteinGroups",
-                     #"protein_acs" = "PG.UniProtIds",
-                     "majority_protein_acs" = "PG.ProteinAccessions",
                      "gene_names" = "PG.Genes", "protein_names" = "PG.ProteinNames",
                      "protein_descriptions" = "PG.ProteinDescriptions",
                      "q_value" = "PG.Qvalue",
+                     "pep_pos" = "PEP.PeptidePosition",
+                     "unmod_seq" = "PEP.StrippedSequence",
                      "pepmodstate_seq" = "EG.PrecursorId")
-    res.df <- dplyr::select(proteinGroups.df, !!!col_renames[col_renames %in% colnames(proteinGroups.df)]) %>%
-        dplyr::mutate(pepmodstate_id = row_number() - 1L,
-                      protein_acs = majority_protein_acs) %>%
+    if (rlang::has_name(report.df, "PG.UniProtIds")) {
+      col_renames["majority_protein_acs"] <- "PG.UniProtIds"
+      if (rlang::has_name(report.df, "PG.ProteinAccessions")) {
+        col_renames["protein_acs"] <- "PG.ProteinAccessions"
+      }
+    } else if (rlang::has_name(report.df, "PG.ProteinAccessions")) {
+      col_renames["majority_protein_acs"] <- "PG.ProteinAccessions"
+    }
+    res.df <- dplyr::select(report.df, !!!col_renames[col_renames %in% colnames(report.df)]) %>%
+        dplyr::mutate(pepmodstate_id = row_number() - 1L) %>%
         tidyr::extract(pepmodstate_seq, c("pepmod_seq", "charge"), "_([^.]+)_\\.(\\d+)", remove=FALSE) %>%
         dplyr::mutate(charge = parse_integer(charge),
                       peptide_seq = str_remove_all(pepmod_seq, "\\[[^]]+\\]"))
+    if (!rlang::has_name(res.df, "protein_acs")) {
+      res.df <- dplyr::mutate(res.df, protein_acs = majority_protein_acs)
+    }
     col_info <- list(pepmodstate = colnames(res.df))
     if ('pg_stats' %in% import_data) {
-        pg_stats.df <- proteinGroups.df %>% dplyr::select(matches("\\.PG\\.(RunEvidenceCount|NrOfModifiedSequencesMeasured|NrOfModifiedSequencesIdentified|NrOfStrippedSequencesIdentified)"))
+        pg_stats.df <- report.df %>% dplyr::select(matches("\\.PG\\.(RunEvidenceCount|NrOfModifiedSequencesMeasured|NrOfModifiedSequencesIdentified|NrOfStrippedSequencesIdentified)"))
         res.df <- dplyr::bind_cols(res.df, pg_stats.df)
         col_info$quantity <- colnames(pg_stats.df)
     }
-    if ('quantity' %in% import_data) {
-        intensities.df <- proteinGroups.df %>% dplyr::select(matches("\\.PEP\\.(RunEvidenceCount|Quantity)"))
+    if ('pep_quantity' %in% import_data) {
+        intensities.df <- report.df %>% dplyr::select(matches("\\.PEP\\.(RunEvidenceCount|Quantity)"))
         res.df <- dplyr::bind_cols(res.df, intensities.df)
         col_info$quantity <- colnames(intensities.df)
     }
-    if ('eg_quantity' %in% import_data) { # FIXME what's that?
-        intensities.df <- proteinGroups.df %>% dplyr::select(matches("\\EG\\.(TotalQuantity \\(Settings\\))"))
+    if ('quantity' %in% import_data) { # FIXME what's that?
+        intensities.df <- report.df %>% dplyr::select(matches("\\EG\\.(TotalQuantity \\(Settings\\))"))
         res.df <- dplyr::bind_cols(res.df, intensities.df)
         col_info$eg_quantity <- colnames(intensities.df)
     }
