@@ -25,8 +25,10 @@ append_protgroups_info <- function(msdata, msdata_wide, proteins_info = NULL,
     # keep only protgroups with data
     intensity_dfnames <- str_subset(names(msdata), "intensities$")
     for (dfname in intensity_dfnames) {
-        if (verbose) message("Contstraining msdata$protgroups to protgroups found in ", dfname)
-        pg_df <- dplyr::semi_join(pg_df, msdata[[dfname]])
+        if (rlang::has_name(msdata[[dfname]], "protgroup_id")) {
+            if (verbose) message("Contstraining msdata$protgroups to protgroups found in ", dfname)
+            pg_df <- dplyr::semi_join(pg_df, msdata[[dfname]])
+        }
     }
     if (verbose) message(nrow(pg_df), " protgroup(s) found")
     if (fix_protein_info) {
