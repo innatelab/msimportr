@@ -23,9 +23,14 @@ read.Spectronaut.ProteinsReport <- function(file, nrows = Inf, import_data = c()
                       protein_acs = majority_protein_acs)
     col_info <- list(protgroup = colnames(res.df))
     if ('quantity' %in% import_data) {
-        quantities.df <- proteinGroups.df %>% dplyr::select(tidyselect::matches("\\.PG\\.(Quantity|RunEvidenceCount|NrOfStrippedSequencesMeasured|NrOfStippedSequencesIdentified|NrOfPrecursorsIdentified)"))
+        quantities.df <- proteinGroups.df %>% dplyr::select(tidyselect::matches("\\.PG\\.Quantity"))
         res.df <- dplyr::bind_cols(res.df, quantities.df)
         col_info$quantity <- colnames(quantities.df)
+    }
+    if ('runstats' %in% import_data) {
+      runstats.df <- proteinGroups.df %>% dplyr::select(tidyselect::matches("\\.PG\\.(RunEvidenceCount|NrOfStrippedSequencesMeasured|NrOfStippedSequencesIdentified|NrOfPrecursorsIdentified)"))
+      res.df <- dplyr::bind_cols(res.df, runstats.df)
+      col_info$runstats <- colnames(runstats.df)
     }
     attr(res.df, "column_groups") <- col_info
     return (res.df)
