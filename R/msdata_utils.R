@@ -240,6 +240,9 @@ cluster_msprofiles <- function(msdata, msrun_stats, obj_col="pepmodstate_id", ms
             profile_cluster = 1L,
             nsimilar_profiles = 1L))
   }
+  obj_stats.df <- group_by(intensities.df, !!!rlang::syms(obj_col)) %>%
+    summarise(n_quants = sum(!is.na(intensity))) %>%
+    dplyr::ungroup()
   # add a bit of noise to avoid zero variance
   intensities.mtx <- matrix(log2(pmax(intensities.df$intensity_imputed + rnorm(nrow(intensities.df)), 0)),
                             ncol = n_distinct(intensities.df[[obj_col]]),
@@ -254,12 +257,15 @@ cluster_msprofiles <- function(msdata, msrun_stats, obj_col="pepmodstate_id", ms
          tmp_profile_cluster = stats::cutree(hclust(dist(obj.pca_featmtx), method="single"),
                                          min(c(nclu, nrow(obj.pca_featmtx), ncol(obj.pca_featmtx)))))
   # assign profile_cluster indices from largest to smallest clusters
-  res_clusizes <- dplyr::group_by(res, tmp_profile_cluster) %>%
-    dplyr::summarise(nsimilar_profiles = n()) %>%
+  res_clustats <- dplyr::inner_join(res, obj_stats.df) %>%
+    dplyr::group_by(tmp_profile_cluster) %>%
+    dplyr::summarise(nsimilar_profiles = n(),
+                     n_quants = sum(n_quants, na.rm=TRUE),
+                     n_quants_median = median(n_quants, na.rm=TRUE)) %>%
     dplyr::ungroup() %>%
-    dplyr::arrange(desc(nsimilar_profiles)) %>%
+    dplyr::arrange(desc(n_quants), desc(nsimilar_profiles)) %>%
     dplyr::mutate(profile_cluster = row_number())
 
-  return(inner_join(res, res_clusizes) %>%
+  return(inner_join(res, res_clustats) %>%
     dplyr::select(-tmp_profile_cluster))
 }
