@@ -111,7 +111,7 @@ SpectronautMetrics <- c("RunEvidenceCount" = "nevidences",
                         "Qvalue" = "qvalue"
                         )
 
-
+#' @export
 pivot_longer.Spectronaut.Metrics <- function(msdata.wide, pkey, colgroup) {
     colgroups <- attr(msdata.wide, "column_groups")
     if (length(colgroup) == 1L) {
