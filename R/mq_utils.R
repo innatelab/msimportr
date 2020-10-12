@@ -437,6 +437,8 @@ backquote <- function( vars ) {
     return (res)
 }
 
+MaxQuant_IdentTypes <- c("ISO-MSMS", "MULTI-MSMS", "MSMS", "MULTI-SECPEP", "MULTI-MATCH", "MULTI-MATCH-MSMS")
+
 read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.txt',
                                             nrows = Inf, guess_max = min(20000L, nrows)) {
     message('Reading evidence table...')
@@ -492,7 +494,7 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
     evidence.df <- dplyr::mutate(evidence.df,
                                  msrun = factor(msrun),
                                  raw_file = factor(raw_file),
-                                 ident_type = factor(ident_type, levels=c("ISO-MSMS", "MULTI-MSMS", "MSMS", "MULTI-SECPEP", "MULTI-MATCH", "MULTI-MATCH-MSMS")),
+                                 ident_type = factor(ident_type, levels=MaxQuant_IdentTypes),
                                  is_contaminant = replace_na(is_contaminant, "") == '+',
                                  is_reverse = replace_na(is_reverse, "") == '+')
     return ( evidence.df )
