@@ -230,7 +230,8 @@ impute_intensities <- function(intensities_df, stats_df, log2_mean_offset=-1.8, 
 cluster_msprofiles <- function(msdata, msrun_stats, obj_col="pepmodstate_id", msrun_col="msrun", nclu=4) {
   # create matrix of intensities
   intensities.df <- tidyr::expand(msdata, !!!rlang::syms(c(obj_col, msrun_col))) %>%
-    dplyr::left_join(msdata, by=c(obj_col, msrun_col)) %>%
+    dplyr::left_join(dplyr::select(msdata, any_of(c(obj_col, msrun_col, "intensity"))),
+                     by=c(obj_col, msrun_col)) %>%
     impute_intensities(msrun_stats) %>%
     dplyr::arrange_at(c(obj_col, msrun_col))
   # handle trivial cases
