@@ -487,7 +487,7 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
         # label-free data, rename column so it gets the tag
         col_renames = c(col_renames, "Intensity F" = "Intensity")
     }
-    col_renames <- col_renames[ col_renames %in% colnames(evidence.df) ]
+    col_renames <- col_renames[col_renames %in% colnames(evidence.df)]
     if (length(col_renames) > 0) {
         evidence.df <- dplyr::rename(evidence.df, !!col_renames)
     }
