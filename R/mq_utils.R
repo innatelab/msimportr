@@ -836,23 +836,25 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                         intensity_corr_reldelta = intensity_corr/intensity - 1.0)
 
     message('Extracting pepmod information...')
-    pepmodXmsrun_stats.df <- evidence.df %>% dplyr::group_by(protgroup_ids, pepmod_id, msrun, raw_file) %>%
+    pepmodXmsrun_stats.df <- dplyr::mutate(evidence.df, has_quants = n_quants > 0) %>%
+        dplyr::group_by(pepmod_id, msrun) %>%
         dplyr::summarize(n_charges = n_distinct(charge),
                          n_evidences = n_distinct(evidence_id),
-                         n_quants = sum(n_quants > 0),
+                         n_quants = sum(has_quants),
                          n_full_quants = sum(is_full_quant)) %>%
         dplyr::ungroup()
-    prediction.df <- dplyr::group_by_at(pms_full_intensities_long_glm.df, glm_group_col) %>% # FIXME support multiple protocols
+    prediction.df <- dplyr::distinct(pms_full_intensities_long_glm.df, across(!!glm_group_col), .keep_all=TRUE) %>% # FIXME support multiple protocols
         # FIXME for different msprotocols GLM could be different
-        dplyr::summarise(glm_rhs = glm_rhs[1], glm_status = glm_status[1],
-                         glm_method = glm_method[1], glm_ndup_effects = glm_ndup_effects[1]) %>% dplyr::ungroup() %>%
         dplyr::mutate(glm_rhs = factor(glm_rhs),
                       glm_status = factor(glm_status, levels=c("success", "skipped", "reverted", "failed")),
                       glm_method = factor(glm_method))
-    pepmod_stats.df <- dplyr::group_by(pepmodXmsrun_stats.df, protgroup_ids, pepmod_id) %>%
+    pepmod_stats.df <- dplyr::mutate(pepmodXmsrun_stats.df,
+                                     has_quants = n_quants > 0,
+                                     has_full_quants = n_full_quants > 0) %>%
+        dplyr::group_by(pepmod_id) %>%
         dplyr::summarise(n_msruns = n(), # actually, raw_files
-                         n_quant_msruns = sum(n_quants > 0),
-                         n_full_quant_msruns = sum(n_full_quants > 0),
+                         n_quant_msruns = sum(has_quants),
+                         n_full_quant_msruns = sum(has_quants),
                          n_max_charges=max(n_charges),
                          n_max_evidences=max(n_evidences)) %>%
         dplyr::ungroup() %>%
