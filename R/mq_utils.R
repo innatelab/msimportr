@@ -565,10 +565,12 @@ glm_corrected_intensities <- function(intensities.df,
         }
     }
     max_intensity_fixed = max(glm_intensities.df$intensity_fixed, na.rm = TRUE)
-    intensities.df$intensity_glm <- NA_real_
-    intensities.df$glm_rhs <- rhs_str
-    intensities.df$glm_method <- rq.method
-    intensities.df$glm_ndup_effects <- 0L
+    intensities.df <- dplyr::mutate(intensities.df,
+        intensity_glm = NA_real_,
+        glm_rhs = rhs_str,
+        glm_method = rq.method,
+        glm_ndup_effects = 0L)
+
     if (ndatapoints > 1L && rhs_str != "0 + msrun" && rhs_str != "0 + mschannel") {
         intensities.df$glm_status <- "failed"
 
@@ -753,10 +755,11 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
     # summarize intensities for pepmodstate_id X msrun pair (there could be multiple ones)
     message('Reshaping, summarizing & weighting pepmodstate intensities...')
     pms_intensities_long.df <- tidyr::pivot_longer(evidence.df, starts_with("intensity"), names_to="mstag", values_to="intensity", names_prefix="intensity.") %>%
-        dplyr::mutate(mstag = factor(mstag, levels = levels(mschannels.df$mstag))) %>%
+        dplyr::mutate(mstag = factor(mstag, levels = levels(mschannels.df$mstag)),
+                      mass_error_w = pmax(replace_na(abs(mass_error_ppm), 1000), 0.01)^(-0.5)) %>%
         dplyr::inner_join(dplyr::select(mschannels.df, msrun, raw_file, mstag, mschannel)) %>%
         dplyr::group_by(pepmod_id, pepmodstate_id, msrun, raw_file, mstag, mschannel) %>%
-        dplyr::summarise(weight = weighted.mean(intensity, abs(1/mass_error_ppm)^0.5),
+        dplyr::summarise(weight = weighted.mean(intensity, mass_error_w),
                          intensity = sum(intensity, na.rm=TRUE)) %>%
         dplyr::group_by(pepmod_id, mschannel) %>%
         dplyr::mutate(weight = pmax(weight/sum(weight), na_weight)) %>%
@@ -938,7 +941,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                 pre_intensities.df$ref_intensity <- pre_intensities.df[[paste0("Intensity ", correct_by_ratio.ref_label)]]
 
                 agg_ratios.df <- pre_intensities.df %>% dplyr::select(pepmod_id, msrun, raw_file, ref_intensity, starts_with("Ratio"), mass_error_ppm) %>%
-                    dplyr::mutate(ratio_weight = abs(1/mass_error_ppm)/sum(abs(1/mass_error_ppm), na.rm=TRUE)) %>%
+                    dplyr::mutate(mass_error_w = pmax(replace_na(abs(mass_error_ppm), 1000), 0.01)^(-0.5),
+                                  ratio_weight = mass_error_w/sum(mass_error_w)) %>%
                     dplyr::mutate_at(inverted_cols, ~ 1/.) %>%
                     dplyr::summarise_at(ref_ratio_cols.df$trf_old_name,
                                         ~ if_else(all(is.na(ratio_weight)), NA_real_,
