@@ -1042,7 +1042,7 @@ read.MaxQuant.Evidence <- function(folder_path, file_name = 'evidence.txt',
                                    evidence.msobj = c("msrun", "mschannel"),
                                    nrows = Inf, guess_max = min(10000L, nrows),
                                    min_pepmodstate_freq = 0.9, min_essential_freq = 0.0,
-                                   correct_ratios = TRUE, correct_by_ratio.ref_label = NA,
+                                   correct_ratios = FALSE, correct_by_ratio.ref_label = NA,
                                    mode = c("labeled", "label-free"), mschannel_annotate.f = NULL,
                                    glm.context = c("protgroup", "pepmod"), glm.max_npepmods=50L,
                                    multidplyr_cluster = NULL)
