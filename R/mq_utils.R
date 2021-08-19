@@ -749,8 +749,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         dplyr::rename(!!intens_cols)
 
     message('Extracting pepmod states...')
-    pepmodstates.df <- dplyr::select(evidence.df, protgroup_ids, pepmodstate_id, pepmod_id, charge) %>% dplyr::distinct() %>%
-      dplyr::arrange(pepmodstate_id)
+    pepmodstates.df <- dplyr::select(evidence.df, protgroup_ids, pepmodstate_id, pepmod_id, charge) %>%
+      dplyr::distinct() %>% dplyr::arrange(pepmodstate_id)
 
     # summarize intensities for pepmodstate_id X msrun pair (there could be multiple ones)
     message('Reshaping, summarizing & weighting pepmodstate intensities...')
@@ -803,16 +803,16 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                            pepmod = multidplyr::partition(pms_full_intensities_long_glm.df, pepmod_id, msprotocol, cluster=multidplyr_cluster),
                            protgroup = multidplyr::partition(pms_full_intensities_long_glm.df, protgroup_ids, msprotocol, cluster=multidplyr_cluster)) %>%
         #multidplyr::partition_(pms_full_intensities_long.df, c(glm_group_col, "msprotocol"), cluster=multidplyr_cluster) %>%
-        dplyr::do({glm_corrected_intensities(., glm_max_factor = glm.max_factor,
+        dplyr::group_modify(.keep=TRUE, ~glm_corrected_intensities(.x, glm_max_factor = glm.max_factor,
                                              glm_reldelta_range = glm.reldelta_range,
                                              max_npepmods = glm.max_npepmods,
-                                             min_intensity = min_intensity)})
+                                             min_intensity = min_intensity))
         message("Collecting GLM results")
         dplyr::collect(distr.df)
     } else {
         dplyr::group_by(pms_full_intensities_long_glm.df, !!glm_group_col, msprotocol) %>%
-            dplyr::do({glm_corrected_intensities(., glm_max_factor = glm.max_factor, glm_reldelta_range = glm.reldelta_range,
-                                                 max_npepmods = glm.max_npepmods, min_intensity=min_intensity)})
+        dplyr::group_modify(.keep=TRUE, ~glm_corrected_intensities(.x, glm_max_factor = glm.max_factor, glm_reldelta_range = glm.reldelta_range,
+                                                 max_npepmods = glm.max_npepmods, min_intensity=min_intensity))
     }
     pms_full_intensities_long_glm.df <- dplyr::ungroup(pms_full_intensities_long_glm.df) %>%
         dplyr::select(-intensity_fixed) %>% # remove temporary non-NA column
