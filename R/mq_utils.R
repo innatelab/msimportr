@@ -843,7 +843,11 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                          n_quants = sum(has_quants),
                          n_full_quants = sum(is_full_quant)) %>%
         dplyr::ungroup()
-    prediction.df <- dplyr::distinct(pms_full_intensities_long_glm.df, across(!!glm_group_col), .keep_all=TRUE) %>% # FIXME support multiple protocols
+    prediction_status.df <- dplyr::select_at(pms_full_intensities_long_glm.df,
+                                             c(glm_group_col, "glm_rhs", "glm_status", "glm_method")) %>%
+        dplyr::filter(!is.na(glm_status)) %>%
+        dplyr::distinct() %>%
+        # FIXME support multiple protocols
         # FIXME for different msprotocols GLM could be different
         dplyr::mutate(glm_rhs = factor(glm_rhs),
                       glm_status = factor(glm_status, levels=c("success", "skipped", "reverted", "failed")),
@@ -858,7 +862,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                          n_max_charges=max(n_charges),
                          n_max_evidences=max(n_evidences)) %>%
         dplyr::ungroup() %>%
-        dplyr::left_join(prediction.df)
+        dplyr::left_join(prediction_status.df)
 
     pepmods.df <- dplyr::select(evidence.df,
                                 any_of(c("pepmod_id", "peptide_id", "protgroup_ids",
@@ -870,8 +874,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         dplyr::distinct() %>%
         dplyr::group_by(pepmod_id) %>%
         dplyr::mutate(charges = paste0(sort(charge), collapse=' ')) %>%
-        dplyr::filter(row_number() == 1L) %>%
-        dplyr::ungroup() %>%
+        dplyr::filter(row_number() == 1L) %>% dplyr::ungroup() %>%
         dplyr::select(-charge) %>%
         dplyr::left_join(pepmod_stats.df) %>%
         dplyr::mutate(is_shared_by_groups = str_detect(protgroup_ids, stringr::fixed(';')),
