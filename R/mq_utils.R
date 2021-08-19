@@ -190,11 +190,6 @@ read.MaxQuant <- function(filename, layout = c("wide", "long"),
     return ( res )
 }
 
-gsub_columns <- function(df, from, to) {
-  colnames(df) <- str_replace(colnames(df), from, to)
-  df
-}
-
 #' @export
 read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.txt',
                                         protein_info = NULL, layout = c("wide", "long"),
@@ -223,44 +218,44 @@ read.MaxQuant.ProteinGroups <- function(folder_path, file_name = 'proteinGroups.
     col_info <- list(protgroup = colnames(res.df))
     if ('intensity' %in% import_data) {
         intensities.df <- proteinGroups.df %>% dplyr::select(starts_with("Intensity")) %>%
-            gsub_columns("^Intensity\\s([LMH](\\s|$))", "Intensity.\\1") %>%
-            gsub_columns("^Intensity(\\s|$)", "Intensity.Sum\\1") %>%
+            dplyr::rename_all(~str_replace(.x, "^Intensity\\s([LMH](\\s|$))", "Intensity.\\1")) %>%
+            dplyr::rename_all(~str_replace(.x, "^Intensity(\\s|$)", "Intensity.Sum\\1")) %>%
             dplyr::mutate_all(zero2na)
         res.df <- dplyr::bind_cols(res.df, intensities.df)
         col_info$intensity <- colnames(intensities.df)
     }
     if ('LFQ' %in% import_data) {
         lfq.df <- proteinGroups.df %>% dplyr::select(starts_with("LFQ intensity")) %>%
-            gsub_columns("^LFQ intensity\\s([LMH](\\s|$))", "LFQ_Intensity.\\1") %>%
-            gsub_columns("^LFQ intensity(\\s|$)", "LFQ_Intensity.Sum\\1") %>%
+            dplyr::rename_all(~str_replace(.x, "^LFQ intensity\\s([LMH](\\s|$))", "LFQ_Intensity.\\1")) %>%
+            dplyr::rename_all(~str_replace(.x, "^LFQ intensity(\\s|$)", "LFQ_Intensity.Sum\\1")) %>%
             dplyr::mutate_all(zero2na)
         res.df <- dplyr::bind_cols(res.df, lfq.df)
         col_info$LFQ <- colnames(lfq.df)
     }
     if ('iBAQ' %in% import_data) {
         ibaq.df <- proteinGroups.df %>% dplyr::select(starts_with("iBAQ")) %>%
-            gsub_columns("^iBAQ\\s([LMH](\\s|$))", "iBAQ.\\1") %>%
-            gsub_columns("^iBAQ(\\s|$)", "iBAQ.Sum\\1") %>%
+            dplyr::rename_all(~str_replace(.x, "^iBAQ\\s([LMH](\\s|$))", "iBAQ.\\1")) %>%
+            dplyr::rename_all(~str_replace(.x, "^iBAQ(\\s|$)", "iBAQ.Sum\\1")) %>%
             dplyr::mutate_all(zero2na)
         res.df <- dplyr::bind_cols(res.df, ibaq.df)
         col_info$iBAQ <- colnames(ibaq.df)
     }
     if ('ratio' %in% import_data) {
         ratios.df <- proteinGroups.df %>% dplyr::select(starts_with("Ratio")) %>%
-            gsub_columns("^Ratio\\s", "Ratio.")
+            dplyr::rename_all(~str_replace(.x, "^Ratio\\s", "Ratio."))
         res.df <- dplyr::bind_cols(res.df, ratios.df)
         col_info$ratio <- colnames(ratios.df)
     }
     if ('ident_type' %in% import_data) {
         ident_types.df <- proteinGroups.df %>% dplyr::select(starts_with("Identification type")) %>%
-          gsub_columns("^Identification\\stype\\s", "ident_type.") %>%
+          dplyr::rename_all(~str_replace(.x, "^Identification\\stype\\s", "ident_type.")) %>%
           dplyr::mutate_all(~factor(.x, levels=c("By matching", "By MS/MS")))
         res.df <- dplyr::bind_cols(res.df, ident_types.df)
         col_info$ident_type <- colnames(ident_types.df)
     }
     if ('ms2_count' %in% import_data) {
       ms2_counts.df <- proteinGroups.df %>% dplyr::select(starts_with("MS/MS count ")) %>%
-        gsub_columns("^MS/MS\\scount\\s", "ms2_count.")
+        dplyr::rename_all(~str_replace(.x, "^MS/MS\\scount\\s", "ms2_count."))
       res.df <- dplyr::bind_cols(res.df, ms2_counts.df)
       col_info$ms2_count <- colnames(ms2_counts.df)
     }
@@ -307,21 +302,21 @@ read.MaxQuant.Peptides <- function(folder_path, file_name = 'peptides.txt',
     col_info <- list(peptide = colnames(res.df))
     if ('intensity' %in% import_data) {
         intensities.df <- dplyr::select(peptides.df, starts_with("Intensity")) %>%
-            gsub_columns("^Intensity\\s([LMH](\\s|$))", "Intensity.\\1") %>%
-            gsub_columns("^Intensity(\\s|$)", "Intensity.Sum\\1") %>%
+            dplyr::rename_all(~str_replace(.x, "^Intensity\\s([LMH](\\s|$))", "Intensity.\\1")) %>%
+            dplyr::rename_all(~str_replace(.x, "^Intensity(\\s|$)", "Intensity.Sum\\1")) %>%
             dplyr::mutate_all(zero2na)
         res.df <- dplyr::bind_cols(res.df, intensities.df)
         col_info$intensity <- colnames(intensities.df)
     }
     if ('aa_stats' %in% import_data) {
        aa_stats.df <- dplyr::select(peptides.df, matches("^[A-Z] Count$")) %>%
-        gsub_columns("([A-Z]) Count", "count_\\1")
+         dplyr::rename_all(~str_replace(.x, "([A-Z]) Count", "count_\\1"))
        res.df <- bind_cols(res.df, aa_stats.df)
        col_info$aa_stats <- colnames(aa_stats.df)
     }
     if ('ident_type' %in% import_data) {
         ident_types.df <- dplyr::select(peptides.df, starts_with("Identification type")) %>%
-          gsub_columns("^Identification\\stype\\s", "ident_type.") %>%
+          dplyr::rename_all(~str_replace(.x, "^Identification\\stype\\s", "ident_type.")) %>%
           dplyr::mutate_all(~factor(.x, levels=c("By matching", "By MS/MS")))
         res.df <- dplyr::bind_cols(res.df, ident_types.df)
         col_info$ident_type <- colnames(ident_types.df)
@@ -404,25 +399,25 @@ read.MaxQuant.Sites <- function(folder_path, file_name, nrows = Inf, modif = "Ph
     res.df <- sites.df
     if ('intensity' %in% import_data) {
         intensities.df <- data.df %>% dplyr::select(starts_with("Intensity")) %>%
-            gsub_columns("^Intensity\\s([LMH](\\s|_|$))", "Intensity.\\1") %>%
-            gsub_columns("^Intensity(\\s|_|$)", "Intensity.Sum\\1") %>%
-            gsub_columns("^Intensity.Sum(.+)(___\\d+)$", "Intensity.Sum\\2\\1") %>%
+            dplyr::rename_all(~str_replace(.x, "^Intensity\\s([LMH](\\s|_|$))", "Intensity.\\1")) %>%
+            dplyr::rename_all(~str_replace(.x, "^Intensity(\\s|_|$)", "Intensity.Sum\\1")) %>%
+            dplyr::rename_all(~str_replace(.x, "^Intensity.Sum(.+)(___\\d+)$", "Intensity.Sum\\2\\1")) %>%
             dplyr::mutate_all(~zero2na(as.numeric(.x)))
         res.df <- dplyr::bind_cols(res.df, intensities.df)
         col_info$intensity <- colnames(intensities.df)
     }
     if ('occupancy' %in% import_data) {
         occupancies.df <- data.df %>% dplyr::select(starts_with("Occupancy")) %>%
-            gsub_columns("^(Occupancy\\s|Occupancy ratio|Occupancy error scale\\s)([LMH](\\s|$))", "\\1.\\2") %>%
-            gsub_columns("^Occupancy ratio", "occupancy_ratio") %>%
-            gsub_columns("^Occupancy error scale", "occupancy_error_scale") %>%
+            dplyr::rename_all(~str_replace(.x, "^(Occupancy\\s|Occupancy ratio|Occupancy error scale\\s)([LMH](\\s|$))", "\\1.\\2")) %>%
+            dplyr::rename_all(~str_replace(.x, "^Occupancy ratio", "occupancy_ratio")) %>%
+            dplyr::rename_all(~str_replace(.x, "^Occupancy error scale", "occupancy_error_scale")) %>%
             dplyr::mutate_all(as.numeric)
         res.df <- dplyr::bind_cols(res.df, occupancies.df)
         col_info$occupancy <- colnames(occupancies.df)
     }
     if ('ratio' %in% import_data) {
         ratios.df <- data.df %>% dplyr::select(starts_with("Ratio mode/base")) %>%
-            gsub_columns("^Ratio mod/base\\s", "ratio_mod2base.") %>%
+            dplyr::rename_all(~str_replace(.x, "^Ratio mod/base\\s", "ratio_mod2base.")) %>%
             dplyr::mutate_all(as.numeric)
         res.df <- dplyr::bind_cols(res.df, ratios.df)
         col_info$ratio <- colnames(ratios.df)
