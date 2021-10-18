@@ -495,177 +495,17 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
     return ( evidence.df )
 }
 
-glm_corrected_intensities <- function(intensities.df,
-                                      use_mstags=TRUE, pepmodXmsrun_iaction = FALSE,
-                                      glm_max_factor = 50.0, max_npepmods = 50L,
-                                      glm_reldelta_range = c(-1+1E-5, 9.0),
-                                      min_intensity = 1E+3) {
-    npepmods <- n_distinct(intensities.df$pepmod_id)
-    if (max_npepmods > 0 && npepmods > max_npepmods) {
-        pepmod_stats.df <- dplyr::group_by(intensities.df, pepmod_id) %>%
-            dplyr::summarise(n_observed = sum(observed),
-                             n_charges = n_distinct(charge),
-                             max_intensity = max(intensity, na.rm=TRUE)) %>%
-            dplyr::ungroup() %>% dplyr::arrange(desc(n_observed), desc(n_charges), desc(max_intensity)) %>%
-            dplyr::filter(row_number() <= max_npepmods)
-        intensities.df <- dplyr::semi_join(intensities.df, pepmod_stats.df)
-    }
-    intensities.df <- dplyr::group_by(intensities.df, msrun) %>%
-        dplyr::mutate(glm_used = !all(is.na(intensity))) %>% dplyr::ungroup()
-    glm_mask <- intensities.df$glm_used
-    glm_intensities.df <- intensities.df[glm_mask,] %>%
-        dplyr::mutate(intensity_fixed = if_else(!is.na(intensity) & intensity > min_intensity,
-                                                intensity, min_intensity)+
-                                         0.05*min_intensity*runif(n(), -1, 1))
-    ndatapoints <- nrow(glm_intensities.df)
-    nmsprotocols <- if ('msprotocol' %in% colnames(glm_intensities.df)) n_distinct(glm_intensities.df$msprotocol) else 1L
-    msrunXcharge <- dplyr::distinct(dplyr::select(dplyr::filter(glm_intensities.df, observed), msrun, charge))
-    # GLM could be run also with ncharges = n_distinct(charge) > 1, but often generates artifacts
-    ncharges <- max(table(msrunXcharge$msrun))
-    nmsruns <- n_distinct(glm_intensities.df$msrun)
-    msrunXtag <- dplyr::distinct(dplyr::select(dplyr::filter(glm_intensities.df, observed), msrun, mstag))
-    nmstags <- max(table(msrunXtag$msrun))
-    rq.method <- ifelse(nmsruns*npepmods > 100L, "lasso", "lasso")
-    rhs_str <- "0"
-    if (nmsruns >= 1) {
-        if (nmstags > 1) {
-            rhs_str <- paste0(rhs_str, " + msrun + msrun:mstag")
-        } else {
-            rhs_str <- paste0(rhs_str, " + msrun")
-        }
-        #if (nmsprotocols > 1L) {
-        #  rhs_str <- str_replace_all(rhs_str, " + (msrun|mschannel)", " + msprotocol + msprotocol:\\1")
-        #}
-    }
-    if (npepmods > 1) {
-        rhs_str <- paste0(rhs_str, " + pepmod_id")
-        if (nmsruns > 1) {
-            # model both individual pepmod regulation and LC variation
-            # (the latter affects all charges of the pepmod in the same way)
-            rhs_str <- paste0(rhs_str, " + msrun:pepmod_id")
-            if (nmstags > 1 && pepmodXmsrun_iaction) {
-                # model both individual pepmod regulation in mstags
-                rhs_str <- paste0(rhs_str, " + msrun:mstag:pepmod_id")
-            }
-        }
-    }
-    if (ncharges > 1) {
-        if (npepmods > 1) {
-            #glm_intensities.df <- dplyr::mutate(glm_intensities.df,
-            #                                    pepmod_charge = factor(paste0(pepmod_id, '_', charge), ordered = FALSE))
-            # FIXME should be pepmod_id + pepmod_id: but results in singular matrix
-            rhs_str <- paste0(rhs_str, " + pepmod_id:charge")
-        } else {
-            rhs_str <- paste0(rhs_str, " + charge")
-        }
-    }
-    max_intensity_fixed = max(glm_intensities.df$intensity_fixed, na.rm = TRUE)
-    intensities.df <- dplyr::mutate(intensities.df,
-        intensity_glm = NA_real_,
-        glm_rhs = rhs_str,
-        glm_method = rq.method,
-        glm_ndup_effects = 0L)
-
-    if (ndatapoints > 1L && rhs_str != "0 + msrun" && rhs_str != "0 + mschannel") {
-        intensities.df$glm_status <- "failed"
-
-        # convert GLM terms into factors to generate proper model and
-        # use only the factors present in the given intensities chunk
-        glm_intensities.df <- dplyr::mutate(glm_intensities.df,
-            intensity_fixed_norm = intensity_fixed/max_intensity_fixed,
-            pepmod_id = factor(pepmod_id, ordered = FALSE),
-            charge = factor(charge, ordered = FALSE),
-            mstag = factor(mstag, ordered = FALSE),
-            msprotocol = factor(msprotocol, ordered = FALSE)
-        )
-        message("Pepmod_id=", glm_intensities.df$pepmod_id[1], " protgroup_ids=", glm_intensities.df$protgroup_ids[1],
-                ' glm_rhs=', rhs_str, ' rq.method=', rq.method)
-        fla <- as.formula(paste0("log(intensity_fixed_norm) ~ ", rhs_str))
-        mod_mtx <- model.matrix(fla, data=glm_intensities.df)
-        glm_intensities.df$glm_ndup_effects <- sum(duplicated(mod_mtx, MARGIN=2L))
-        mod_mtx_attrs <- attributes(mod_mtx)
-        mod_mtx <- mod_mtx[,!duplicated(mod_mtx, MARGIN=2L) & colSums(mod_mtx) > 0]
-        mod_mtx_attrs[names(attributes(mod_mtx))] <- attributes(mod_mtx)
-        attributes(mod_mtx) <- mod_mtx_attrs
-        #for (ltl in -6:1) { # try different scales
-        if (requireNamespace("quantreg")) {
-        tryCatch({
-            # FIXME GLM assumes one pepmod_id
-            #glm_res <- glm(fla,
-            #               data = intensities.df,
-            #               weights = intensities.df$weight)
-            glm_res <- rq.wfit(mod_mtx, log(glm_intensities.df$intensity_fixed_norm),
-                               weights = glm_intensities.df$weight, method=rq.method)
-            class(glm_res) <- "rq"
-            #glm_res <- rq(fla, data=glm_intensities.df, weights = glm_intensities.df$weight, method = rq.method)
-            #     control = lmRob.control(tl=exp(ltl), tlo=1E-4, tua=1.5E-4, mxs=100, mxr=100, mxf=100,
-            #                            initial.alg = "random"))#, final.alg = "adaptive"))
-            #glm_res <- lmRob(fla,
-            #                data = glm_intensities.df,
-            #                weights = glm_intensities.df$weight,
-            #                control = control.params)
-            #glm_res <- rq(log(intensity.Sum) ~ msrun + pepmod_id,
-            #              data = glm_intensities.df %>% dplyr::mutate(pepmod_id = factor(pepmod_id)),
-            #              weights = glm_intensities.df$weight)
-            intensities.df$intensity_glm <- NA_real_
-            intensities.df$intensity_fixed <- NA_real_
-            intensities.df[glm_mask, 'intensity_glm'] <- exp(predict(glm_res))*max_intensity_fixed
-            intensities.df[glm_mask, 'intensity_fixed'] <- glm_intensities.df$intensity_fixed
-            intensities.df$glm_status <- "success"
-            #    break
-        }, error = function(e) warning(e), finally = invisible())
-        }
-        #}
-    } else {
-        intensities.df$glm_status <- "skipped"
-    }
-    if (intensities.df$glm_status[1] == "success") {
-        # GLM succeeded, now check if its results are valid and correct
-        intensities.df <- dplyr::mutate(intensities.df,
-                                        intensity_glm_reldelta = intensity_glm/intensity_fixed - 1,
-                                        is_valid = if_else(observed, dplyr::between(intensity_glm_reldelta, glm_reldelta_range[[1]], glm_reldelta_range[[2]]), TRUE))
-        if (all(intensities.df$is_valid)) {
-            # use GLM predictions correcting for
-            # anomalously big GLM predictions (e.g. when charge of higest intensity was missing and got predicted)
-            intensities.df <- dplyr::mutate(intensities.df,
-                                            intensity_corr = pmin(intensity_glm, glm_max_factor*max_intensity_fixed) )
-        } else {
-            # GLM generates outliers that do not make sense, use the original intensities
-            intensities.df$intensity_corr <-intensities.df$intensity
-            intensities.df$glm_status <- "reverted"
-        }
-        intensities.df <- dplyr::mutate(intensities.df,
-                                        intensity_corr_reldelta = (intensity_corr - intensity_fixed) / pmax(intensity_corr, intensity_fixed) )
-    } else {
-        # GLM failed, use the original intensities
-        intensities.df <- dplyr::mutate(intensities.df,
-                                        intensity_glm_reldelta = NA_real_,
-                                        is_valid = NA,
-                                        intensity_corr = intensity,
-                                        intensity_corr_reldelta = if_else(!is.na(intensity), 0.0, NA_real_))
-    }
-    return (intensities.df)
-}
-
 process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod", "pepmodstate"),
                                        evidence.msobj = c("msrun", "mschannel"),
-                                       min_pepmodstate_freq = 0.9, min_essential_freq = 0.0,
                                        import_data = c("intensity"),
-                                       correct_ratios = TRUE,
-                                       correct_by_ratio.ref_label = NA,
                                        mode = c("labeled", "label-free"),
                                        mschannel_annotate.f = NULL,
                                        na_weight = 1E-5, min_intensity = 1E+3,
-                                       glm.min_intensity = 50*min_intensity,
-                                       glm.max_factor = 50, glm.max_npepmods=25L,
-                                       glm.context = c("protgroup", "pepmod"),
-                                       glm.reldelta_range = c(-1+1E-5, 99.0),
                                        multidplyr_cluster = NULL )
 {
     quant_mode <- match.arg(mode)
     evidence_pepobj <- match.arg(evidence.pepobj)
     evidence_msobj <- match.arg(evidence.msobj)
-    glm_context <- match.arg(glm.context)
     complete_names <- function( vars ) {
         res <- vars
         res_names <- names(vars)
@@ -773,62 +613,16 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         pms_full_intensities_long.df$msprotocol <- "default"
     }
 
-    message('Correcting & predicting missing intensities...')
-    glm_group_col <- switch(glm_context,
-                            pepmod = 'pepmod_id',
-                            protgroup = 'protgroup_ids',
-                            stop('Unsupported glm.context ', glm_context))
-    pms_full_intensities_long_glm.df <- dplyr::filter(pms_full_intensities_long.df, mstag != 'Sum')
-    pms_full_intensities_long_glm.df <- if (!correct_ratios) {
-      dplyr::mutate(pms_full_intensities_long_glm.df,
-                    intensity_fixed = intensity,
-                    intensity_corr = NA_real_,
-                    intensity_glm = NA_real_,
-                    glm_rhs = NA_character_,
-                    glm_status = "skipped",
-                    glm_method = NA_character_,
-                    glm_ndup_effects = 0L)
-    } else if (!is.null(multidplyr_cluster)) {
-        message('Distributing GLM tasks over the cluster')
-        parallel::clusterEvalQ(cl=multidplyr_cluster, require(quantreg))
-        parallel::clusterExport(cl=multidplyr_cluster, "glm_corrected_intensities")
-        parallel::clusterExport(cl=multidplyr_cluster, c("glm.max_factor", "glm.reldelta_range", "glm.max_npepmods", "min_intensity"),
-                                envir=environment())
-        distr.df <- switch(glm_context,
-                           pepmod = multidplyr::partition(pms_full_intensities_long_glm.df, pepmod_id, msprotocol, cluster=multidplyr_cluster),
-                           protgroup = multidplyr::partition(pms_full_intensities_long_glm.df, protgroup_ids, msprotocol, cluster=multidplyr_cluster)) %>%
-        #multidplyr::partition_(pms_full_intensities_long.df, c(glm_group_col, "msprotocol"), cluster=multidplyr_cluster) %>%
-        dplyr::group_modify(.keep=TRUE, ~glm_corrected_intensities(.x, glm_max_factor = glm.max_factor,
-                                             glm_reldelta_range = glm.reldelta_range,
-                                             max_npepmods = glm.max_npepmods,
-                                             min_intensity = min_intensity))
-        message("Collecting GLM results")
-        dplyr::collect(distr.df)
-    } else {
-        dplyr::group_by(pms_full_intensities_long_glm.df, !!glm_group_col, msprotocol) %>%
-        dplyr::group_modify(.keep=TRUE, ~glm_corrected_intensities(.x, glm_max_factor = glm.max_factor, glm_reldelta_range = glm.reldelta_range,
-                                                 max_npepmods = glm.max_npepmods, min_intensity=min_intensity))
-    }
-    pms_full_intensities_long_glm.df <- dplyr::ungroup(pms_full_intensities_long_glm.df) %>%
-        dplyr::select(-intensity_fixed) %>% # remove temporary non-NA column
-        dplyr::bind_rows(dplyr::filter(pms_full_intensities_long.df, mstag == 'Sum'))
-
     if (evidence_pepobj == "pepmod") {
       message('Summing intensities of different charges...')
-      full_intensities_long.df <- pms_full_intensities_long_glm.df %>%
+      full_intensities_long.df <- pms_full_intensities_long.df %>%
           dplyr::group_by(pepmod_id, msrun, raw_file, mschannel, mstag) %>%
-          dplyr::summarise(intensity = sum(intensity, na.rm=TRUE),
-                           intensity_glm = sum(intensity_glm, na.rm=TRUE),
-                           intensity_corr = sum(intensity_corr, na.rm=TRUE))
+          dplyr::summarise(intensity = sum(intensity, na.rm=TRUE))
     } else {
-      full_intensities_long.df <- pms_full_intensities_long_glm.df
+      full_intensities_long.df <- pms_full_intensities_long.df
     }
     full_intensities_long.df <- dplyr::ungroup(full_intensities_long.df) %>%
-          dplyr::mutate(intensity = if_else(intensity > 0, intensity, NA_real_),
-                        intensity_glm = if_else(mstag == 'Sum', NA_real_, intensity_glm),
-                        intensity_corr = if_else(intensity_corr > glm.min_intensity, intensity_corr, NA_real_),
-                        intensity_glm_reldelta = intensity_glm/intensity - 1.0,
-                        intensity_corr_reldelta = intensity_corr/intensity - 1.0)
+          dplyr::mutate(intensity = if_else(intensity > 0, intensity, NA_real_))
 
     message('Extracting pepmod information...')
     pepmodXmsrun_stats.df <- dplyr::mutate(evidence.df, has_quants = n_quants > 0) %>%
@@ -838,15 +632,6 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                          n_quants = sum(has_quants),
                          n_full_quants = sum(is_full_quant)) %>%
         dplyr::ungroup()
-    prediction_status.df <- dplyr::select_at(pms_full_intensities_long_glm.df,
-                                             c(glm_group_col, "glm_rhs", "glm_status", "glm_method")) %>%
-        dplyr::filter(!is.na(glm_status)) %>%
-        dplyr::distinct() %>%
-        # FIXME support multiple protocols
-        # FIXME for different msprotocols GLM could be different
-        dplyr::mutate(glm_rhs = factor(glm_rhs),
-                      glm_status = factor(glm_status, levels=c("success", "skipped", "reverted", "failed")),
-                      glm_method = factor(glm_method))
     pepmod_stats.df <- dplyr::mutate(pepmodXmsrun_stats.df,
                                      has_quants = n_quants > 0,
                                      has_full_quants = n_full_quants > 0) %>%
@@ -856,8 +641,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                          n_full_quant_msruns = sum(has_quants),
                          n_max_charges=max(n_charges),
                          n_max_evidences=max(n_evidences)) %>%
-        dplyr::ungroup() %>%
-        dplyr::left_join(prediction_status.df)
+        dplyr::ungroup()
 
     pepmods.df <- dplyr::select(evidence.df,
                                 any_of(c("pepmod_id", "peptide_id", "protgroup_ids",
@@ -903,74 +687,6 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                       exists = old_name %in% colnames(evidence.df),
                       inverted_exists = inverted_old_name %in% colnames(evidence.df))
 
-    # quant_mode defines which features are used for quantitation
-    # label-free mode favours features that are observed in multiple runs
-    # labeled mode favours features that have most quantitations per label
-
-    if ("ratio" %in% import_data) {
-        if (correct_ratios) {
-            # channel/msrun ratios are more precisely measured than intensities even within the features of same pepmod
-            # so calculate average ratios per pepmod and use these ratios to correct the absolute intensities:
-            # the ratios of the corrected intensities should match
-            message( "Correcting intensities by averaging ratios..." )
-            if (quant_mode == "label-free") {
-                if (!("condition" %in% colnames(mschannels.df))) {
-                    stop("No condition annotations, cannot average ratios, specify mschannel_annotate.f function")
-                }
-                rlm.control <- lmrob.control("KS2014")
-                intensities.df <- dplyr::left_join(intensities.df, mschannels.df) %>%
-                    dplyr::left_join(dplyr::select(pepmods.df, pepmod_id, protgroup_ids)) %>%
-                    dplyr::group_by(condition, protgroup_ids)
-                intensities.df <- dplyr::do(intensities.df, {glm_corrected_intensities(., rlm.control)})
-                intensities.df <- intensities.df %>%
-                    dplyr::ungroup() %>% dplyr::select(-protgroup_ids, -condition)
-            } else if (quant_mode == "labeled") {
-                ref_ratio_cols.df <- dplyr::bind_rows(
-                    dplyr::filter(ratio_columns.df, exists & mstag_denom == correct_by_ratio.ref_label) %>%
-                    dplyr::mutate(is_inverted = FALSE,
-                                  trf_old_name = old_name),
-                    dplyr::filter(ratio_columns.df, exists & mstag_nom == correct_by_ratio.ref_label) %>%
-                    dplyr::mutate(mstag_nom = mstag_denom,
-                                  mstag_denom = correct_by_ratio.ref_label,
-                                  is_inverted = TRUE,
-                                  trf_old_name = gsub('\\s$', '', paste0(measure, ' ', mstag_nom, '/', mstag_denom, ' ', type)))
-                    ) %>%
-                    dplyr::filter(type == "")
-                inverted_cols <- ref_ratio_cols.df$old_name[ref_ratio_cols.df$is_inverted]
-                names(inverted_cols) <- ref_ratio_cols.df$trf_old_name[ref_ratio_cols.df$is_inverted]
-                pre_intensities.df$ref_intensity <- pre_intensities.df[[paste0("Intensity ", correct_by_ratio.ref_label)]]
-
-                agg_ratios.df <- pre_intensities.df %>% dplyr::select(pepmod_id, msrun, raw_file, ref_intensity, starts_with("Ratio"), mass_error_ppm) %>%
-                    dplyr::mutate(mass_error_w = pmax(replace_na(abs(mass_error_ppm), 1000), 0.01)^(-0.5),
-                                  ratio_weight = mass_error_w/sum(mass_error_w)) %>%
-                    dplyr::mutate_at(inverted_cols, ~ 1/.) %>%
-                    dplyr::summarise_at(ref_ratio_cols.df$trf_old_name,
-                                        ~ if_else(all(is.na(ratio_weight)), NA_real_,
-                                                 weighted.mean(.[!is.na(ratio_weight)],
-                                                               ratio_weight[!is.na(ratio_weight)], na.rm=TRUE)))
-                ilabels_ordered <- c(as.character(ref_ratio_cols.df$mstag_nom), correct_by_ratio.ref_label)
-                intens_mtx <- as.matrix(intensities.df[paste0("intensity.", ilabels_ordered)])
-                ratios_mtx <- cbind(as.matrix(agg_ratios.df[ref_ratio_cols.df$trf_old_name]),
-                                    if_else(is.na(intens_mtx[[ncol(intens_mtx)]]), 0, 1))
-                w_avg_intens <- Matrix::rowSums(intens_mtx * ratios_mtx, na.rm = TRUE)
-                ratio_sqr_sum <- Matrix::rowSums(ratios_mtx * ratios_mtx, na.rm = TRUE)
-                # corrected reference intensity that would minimize
-                # the total sqr deviation of corrected intensities vs original intensities
-                ref_intensity_corr <- w_avg_intens/ratio_sqr_sum
-                intens_corr_mtx <- ratios_mtx * replicate(ncol(ratios_mtx), ref_intensity_corr)
-                intensities.df[paste0("intensity_corr.", ilabels_ordered)] <- intens_corr_mtx
-                intensities.df$intensity_corr.Sum <- Matrix::rowSums(intens_corr_mtx, na.rm = TRUE)
-                # restore intensities that are NA because no ratio available
-                for (lbl in ilabels) {
-                    col_corr <- paste0("intensity_corr.", lbl)
-                    col_orig <- paste0("intensity.", lbl)
-                    intensities.df[col_corr] <- if_else(is.na(intensities.df[[col_corr]]) | intensities.df[[col_corr]]==0.0,
-                                                        intensities.df[[col_orig]],
-                                                        intensities.df[[col_corr]])
-                }
-            }
-        }
-    }
     message('Converting intensities to ', evidence_msobj, ' row format...')
     if (evidence_msobj == 'mschannel') {
         #print(str(intensities.df))
@@ -1041,20 +757,12 @@ read.MaxQuant.Evidence <- function(folder_path, file_name = 'evidence.txt',
                                    evidence.pepobj = c("pepmod", "pepmodstate"),
                                    evidence.msobj = c("msrun", "mschannel"),
                                    nrows = Inf, guess_max = min(10000L, nrows),
-                                   min_pepmodstate_freq = 0.9, min_essential_freq = 0.0,
-                                   correct_ratios = FALSE, correct_by_ratio.ref_label = NA,
-                                   mode = c("labeled", "label-free"), mschannel_annotate.f = NULL,
-                                   glm.context = c("protgroup", "pepmod"), glm.max_npepmods=50L,
-                                   multidplyr_cluster = NULL)
+                                   mode = c("labeled", "label-free"), mschannel_annotate.f = NULL)
 {
     process.MaxQuant.Evidence(read.MaxQuant.Evidence_internal(
         folder_path = folder_path, file_name = file_name, nrows = nrows, guess_max=guess_max),
         evidence.pepobj = evidence.pepobj, evidence.msobj = evidence.msobj,
-        min_pepmodstate_freq = min_pepmodstate_freq,
-        min_essential_freq = min_essential_freq,
-        correct_ratios = correct_ratios,
-        correct_by_ratio.ref_label = correct_by_ratio.ref_label,
-        mode = mode, glm.context = glm.context, glm.max_npepmods = glm.max_npepmods,
+        mode = mode,
         mschannel_annotate.f = mschannel_annotate.f,
         multidplyr_cluster = multidplyr_cluster)
 }
