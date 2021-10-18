@@ -641,13 +641,13 @@ process.MaxQuant.Evidence <- function( evidence.df,
         dplyr::inner_join(dplyr::select(msruns.df, msexperiment, msrun, raw_file, msfraction, msprotocol),
                           by=c("raw_file"))
 
-    pepmodstate_cols <- c("pepmod_id", "pepmod_id_mq", "charge")
+    pepmodstate_cols <- c("pepmod_id", "charge")
     if (any(!is.na(mschannels.df$msfraction))) {
         message("MS data contains MS fractions, pepmodstate in different fractions get unique IDs")
         pepmodstate_cols <- c(pepmodstate_cols, "msfraction")
     }
     message('Extracting pepmod states (', paste0(pepmodstate_cols, collapse=' X '), ')...')
-    pepmodstates.df <- dplyr::select(evidence.df, protgroup_ids, !!!syms(pepmodstate_cols)) %>%
+    pepmodstates.df <- dplyr::select(evidence.df, !!!syms(pepmodstate_cols), pepmod_id_mq, protgroup_ids) %>%
       dplyr::distinct() %>% dplyr::arrange_at(pepmodstate_cols) %>%
       dplyr::mutate(pepmodstate_id = row_number())
     evidence.df <- dplyr::left_join(evidence.df,
