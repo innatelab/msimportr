@@ -539,6 +539,15 @@ process.MaxQuant.Evidence <- function( evidence.df,
         checkmate::assert_names(colnames(annot.df), must.include = "raw_file")
         checkmate::assert_set_equal(as.character(annot.df$raw_file),
                                     as.character(mschannels.df$raw_file))
+        if (rlang::has_name(attributes(annot.df), "column_scopes")) {
+            message("  * detected user-provided MS channel column scopes")
+            annot_col_scopes <- attr(annot.df, "column_scopes", exact=TRUE)
+            checkmate::assert_character(annot_col_scopes, any.missing=FALSE, names="unique")
+            checkmate::assert_subset(annot_col_scopes, choices=c("msexperiment", "msrun", "mschannel"))
+            checkmate::assert_subset(names(annot_col_scopes), colnames(annot.df))
+        } else {
+            annot_col_scopes <- c()
+        }
         if (rlang::has_name(colnames(annot.df), "msexperiment_mq")) {
             checkmate::assert_set_equal(as.character(annot.df$msexperiment_mq),
                                         as.character(mschannels.df$msexperiment_mq))
@@ -574,6 +583,8 @@ process.MaxQuant.Evidence <- function( evidence.df,
                 stop("User-specified msrun IDs in mschannel annotations do not correctly match raw_files")
             }
         }
+    } else {
+        annot_col_scopes <- c()
     }
     if (rlang::has_name(mschannels.df, "msexperiment")) {
         message('Overriding MaxQuant experiment IDs (msexperiment)')
@@ -620,11 +631,20 @@ process.MaxQuant.Evidence <- function( evidence.df,
     if (n_distinct(mschannels.df$mschannel) != nrow(mschannels.df)) {
         stop('mschannel ids are not unique')
     }
+    annot_col_scopes[['msexperiment']] <- "msexperiment"
+    annot_col_scopes[['msexperiment_mq']] <- "msexperiment"
+    annot_col_scopes[['msprotocol']] <- "msexperiment"
+    annot_col_scopes[['raw_file']] <- "msrun"
+    annot_col_scopes[['msrun']] <- "msrun"
+    annot_col_scopes[['msfraction']] <- "msrun"
+    annot_col_scopes[['msfraction_mq']] <- "msrun"
+    annot_col_scopes[['mschannel']] <- "mschannel"
+    annot_col_scopes[['mstag']] <- "mschannel"
+    annot_col_scopes[['quant_type']] <- "mschannel"
     mschannels.df <- dplyr::mutate(mschannels.df, quant_type = factor(quant_type))
-    msexperiments.df <- dplyr::select(mschannels.df, msexperiment_mq, msexperiment) %>% dplyr::distinct()
-    msruns.df <- dplyr::select(mschannels.df, -mschannel, -mstag, -quant_type) %>%
-                 dplyr::group_by(raw_file, msexperiment, msrun, msprotocol, msfraction, .drop="FALSE") %>%
-                 dplyr::filter(row_number() == 1L) %>% dplyr::ungroup()
+    msruns.df <- dplyr::select_at(mschannels.df, names(annot_col_scopes)[annot_col_scopes %in% c('msrun', 'msexperiment')]) %>%
+                 dplyr::distinct()
+    msexperiments.df <- dplyr::select_at(msruns.df, names(annot_col_scopes)[annot_col_scopes == 'msexperiment']) %>% dplyr::distinct()
     # NOTE?: the same mod. peptide Id can have multiple mod. sequences (mod at different poses)
     message('Enumerating pepmod states and summarizing channel intensities...')
     intensities.mtx <- as.matrix(evidence.df[,dplyr::filter(intensity_columns.df, quant_type != 'aggregate')$old_name])
