@@ -438,7 +438,7 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
                                             nrows = Inf, guess_max = min(20000L, nrows)) {
     message('Reading evidence table...')
     evidence.df <- readr::read_tsv(file.path(folder_path, file_name), col_names = TRUE, n_max = nrows,
-                            col_types = readr::cols(Resolution = 'n',
+                            col_types = readr::cols(Resolution = 'n', Fraction = 'i',
                                             `Protein group IDs` = 'c',
                                             `Oxidation (M) site IDs` = 'c',
                                             `Met->AHA site IDs` = 'c',
@@ -453,7 +453,8 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
     # fix column names from different MQ versions
     col_renames <- c(evidence_id = 'id',
                      pepmod_id = 'Mod. peptide ID',
-                     raw_file = "Raw file", msrun = "Experiment", ident_type = "Type", label_state = 'Labeling State',
+                     raw_file = "Raw file", msexperiment_mq = "Experiment", msfraction_mq = "Fraction",
+                     ident_type = "Type", label_state = 'Labeling State',
                      mass_error_ppm = "Mass Error [ppm]", mass_error_da = "Mass Error [Da]",
                      mass_error_ppm = "Mass error [ppm]", mass_error_da = "Mass error [Da]",
                      uncalib_mass_error_ppm = "Uncalibrated Mass Error [ppm]",
@@ -475,7 +476,7 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
                      delta_mz_da = "Uncalibrated - Calibrated m/z [Da]",
                      delta_mz_ppm = "Uncalibrated - Calibrated m/z [ppm]"
     )
-    if (any(str_detect(colnames(evidence.df), "Intensity "))) {
+    if (any(str_detect(colnames(evidence.df), "^Intensity \\S+"))) {
         # intensity is an aggregation column of labeled intensities
         col_renames = c(col_renames, "Intensity Sum" = "Intensity")
     } else {
@@ -487,7 +488,7 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
         evidence.df <- dplyr::rename(evidence.df, !!col_renames)
     }
     evidence.df <- dplyr::mutate(evidence.df,
-                                 msrun = factor(msrun),
+                                 msexperiment_mq = factor(msexperiment_mq),
                                  raw_file = factor(raw_file),
                                  ident_type = factor(ident_type, levels=MaxQuant_IdentTypes),
                                  is_contaminant = replace_na(is_contaminant, "") == '+',
@@ -495,17 +496,12 @@ read.MaxQuant.Evidence_internal <- function(folder_path, file_name = 'evidence.t
     return ( evidence.df )
 }
 
-process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod", "pepmodstate"),
-                                       evidence.msobj = c("msrun", "mschannel"),
+process.MaxQuant.Evidence <- function( evidence.df,
                                        import_data = c("intensity"),
-                                       mode = c("labeled", "label-free"),
                                        mschannel_annotate.f = NULL,
                                        na_weight = 1E-5, min_intensity = 1E+3,
                                        multidplyr_cluster = NULL )
 {
-    quant_mode <- match.arg(mode)
-    evidence_pepobj <- match.arg(evidence.pepobj)
-    evidence_msobj <- match.arg(evidence.msobj)
     complete_names <- function( vars ) {
         res <- vars
         res_names <- names(vars)
@@ -514,86 +510,151 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         return (res)
     }
     message("Extracting MS runs and MS channels info...")
-    ilabels <- factor(c("H", "M", "L", "F", 'Sum'),
-                      levels = c("H", "M", "L", "F", 'Sum'))
-    intensity_columns.df <- tidyr::expand_grid(measure = 'intensity', mstag = ilabels) %>%
+    intensity_columns.df <- tidyr::expand_grid(measure = 'intensity',
+            mstag = factor(c("H", "M", "L", "F", 'Sum'),
+                           levels = c("H", "M", "L", "F", 'Sum'))) %>%
         mutate(old_name = paste0('Intensity ', mstag),
                new_name = paste0(measure, '.', mstag),
-               type = case_when(mstag == 'Sum' ~ 'aggregate',
-                                old_name %in% colnames(evidence.df) ~ 'measured',
-                                TRUE ~ 'missing')) %>%
-        dplyr::filter(type != 'missing') %>%
-        dplyr::mutate(type = factor(type)) %>%
-        dplyr::arrange(mstag)
-    ilabels <- intensity_columns.df$mstag # restrict to the labels actually used
-    msruns.df <- dplyr::select(evidence.df, msrun, raw_file) %>% dplyr::distinct()
-    mschannels.df <- tidyr::expand_grid(raw_file = msruns.df$raw_file,
-                                        mstag = ilabels) %>%
-        dplyr::inner_join(msruns.df) %>%
-        dplyr::mutate(
-            mschannel = interaction(msrun, mstag, drop=TRUE, lex.order=TRUE, sep='_'),
-            quant_type = if_else(mstag %in% c('H','M','L'), 'SILAC',
-                                 if_else(mstag == 'Sum', 'aggregate', 'label_free')))
-    if (any(mschannels.df$quant_type == 'SILAC')) {
-        message('Evidence table contains SILAC-labeled data')
-        mode <- 'labeled'
-    } else {
-        message('Evidence table contains label-free data')
-        model <- 'label-free'
-    }
+               quant_type = case_when(mstag %in% c('H','M','L') ~ 'SILAC',
+                                      mstag == 'F' ~ 'label_free',
+                                      mstag == 'Sum' ~ 'aggregate',
+                                      TRUE ~ NA_character_)) %>%
+        dplyr::filter(old_name %in% colnames(evidence.df)) %>%
+        dplyr::mutate(quant_type = factor(quant_type, levels=c('label_free', 'SILAC', 'aggregate'))) %>%
+        dplyr::arrange(mstag) %>%
+        # restrict to the labels actually used
+        dplyr::mutate(mstag = factor(mstag, levels=as.character(unique(mstag))))
+    raw_files.df <- dplyr::select(evidence.df, raw_file, msexperiment_mq, msfraction_mq) %>% dplyr::distinct()
+    mschannels.df <- tidyr::expand_grid(raw_file = unique(evidence.df$raw_file),
+                                        mstag = unique(intensity_columns.df$mstag)) %>%
+        dplyr::inner_join(raw_files.df, by="raw_file") %>%
+        dplyr::inner_join(dplyr::select(intensity_columns.df, mstag, quant_type) %>% dplyr::distinct(),
+                          by="mstag")
+    message("Data contains ", nrow(mschannels.df), " mschannel(s)")
     if (!is.null(mschannel_annotate.f)) {
         # get user-defined mschannel annotations
         annot.df <- mschannel_annotate.f(mschannels.df)
+        checkmate::assert_data_frame(annot.df)
+        checkmate::assert_names(colnames(annot.df), must.include = "raw_file")
+        checkmate::assert_set_equal(as.character(annot.df$raw_file),
+                                    as.character(mschannels.df$raw_file))
+        if (rlang::has_name(colnames(annot.df), "msexperiment_mq")) {
+            checkmate::assert_set_equal(as.character(annot.df$msexperiment_mq),
+                                        as.character(mschannels.df$msexperiment_mq))
+        }
         if (nrow(annot.df) != nrow(mschannels.df)) {
-            stop("mschannel annotations has incorrect number of rows")
+            stop("User-specified mschannel annotations has incorrect number of rows")
         }
         mschannels_annot.df <- dplyr::left_join(mschannels.df, annot.df)
         if (nrow(mschannels_annot.df) != nrow(mschannels.df)) {
-            stop("mschannel annotations do not correctly match mschannels")
+            stop("User-specified mschannel annotations do not correctly match mschannels")
         }
+        checkmate::assert_set_equal(as.character(mschannels_annot.df$raw_file),
+                                    as.character(mschannels.df$raw_file))
         mschannels.df <- mschannels_annot.df
-        if ('is_msrun_used' %in% colnames(mschannels.df)) {
-            message('Removing unused user-specified msruns')
-            mschannels.df <- dplyr::filter(mschannels.df, !is.na(is_msrun_used) & is_msrun_used) %>%
-                # drop unused levels
-                dplyr::mutate(msrun = factor(msrun),
-                              raw_file = factor(raw_file),
-                              mschannel = factor(mschannel))
-            evidence.df <- dplyr::filter(evidence.df, as.character(raw_file) %in% mschannels.df$raw_file) %>%
-                dplyr::mutate(raw_file = factor(raw_file, levels=levels(mschannels.df$raw_file)),
-                              msrun = factor(msrun, levels=levels(mschannels.df$msrun)))
+        if (rlang::has_name(mschannels.df, 'is_skipped')) {
+            message('Skipping ', sum(mschannels.df$is_skipped, na.rm=TRUE),
+                    ' of ', nrow(mschannels.df), ' mschannels(s) excluded by user')
+            mschannels.df <- dplyr::filter(mschannels.df, !dplyr::coalesce(is_skipped, FALSE))
+            evidence.df <- dplyr::filter(evidence.df, raw_file %in% mschannels.df$raw_file)
+            # drop unused levels
+            mschannels.df <- dplyr::mutate_at(mschannels.df,
+                    vars(any_of(c("msexperiment_mq", "msexperiment", "msrun", "mschannel", "raw_file"))),
+                    ~factor(., levels=unique(as.character(.))))
+            evidence.df <- dplyr::mutate(evidence.df,
+                    raw_file = factor(raw_file, levels=levels(mschannels.df$raw_file)),
+                    msexperiment_mq = factor(msexperiment_mq, levels=levels(mschannels.df$msexperiment_mq)))
             if (nrow(evidence.df) == 0) {
-                stop("Empty evidence frame after is_msrun_used filtering")
+                stop("Empty evidence frame after unused MS filtering")
             }
         }
-        if (n_distinct(mschannels.df$mschannel) != nrow(mschannels.df)) {
-            stop('mschannel ids are not unique')
+        if (rlang::has_name(mschannels.df, "msrun")) {
+            if (n_distinct(mschannels.df$msrun) != n_distinct(mschannels.df$raw_file)) {
+                stop("User-specified msrun IDs in mschannel annotations do not correctly match raw_files")
+            }
         }
     }
+    if (rlang::has_name(mschannels.df, "msexperiment")) {
+        message('Overriding MaxQuant experiment IDs (msexperiment)')
+    } else {
+        mschannels.df$msexperiment <- mschannels.df$msexperiment_mq
+    }
+    mschannel_cols <- "msexperiment"
+    if (rlang::has_name(mschannels.df, "msfraction")) {
+        message('Overriding MaxQuant fraction IDs (msfraction)')
+        mschannel_cols <- c(mschannel_cols, "msfraction")
+    } else {
+        mschannels.df <- dplyr::mutate(mschannels.df, msfraction = msfraction_mq)
+    }
+    if (any(intensity_columns.df$quant_type == 'SILAC')) {
+        message('Evidence table contains SILAC-labeled data')
+        mschannel_cols <- c(mschannel_cols, "mstag")
+    }
+    if (!rlang::has_name(mschannels.df, "msprotocol")) {
+        message("No MS protocols specified")
+        mschannels.df <- dplyr::mutate(mschannels.df, msprotocol = NA_integer_)
+    }
+    if (!rlang::has_name(mschannels.df, "msrun")) {
+        message("No MS runs specified, Generating IDs")
+        if (!rlang::has_name(mschannels.df, "msfraction")) {
+            message("Assuming msrun=msexperiment")
+            mschannels.df <- dplyr::mutate(mschannels.df, msrun = msexperiment)
+        } else {
+            message("Assuming msrun=msexperiment X msfraction")
+            mschannels.df <- dplyr::mutate(mschannels.df,
+                `__msfraction_sym__` = paste0("F", msfraction),
+                msrun = interaction(msexperiment, `__msfraction_sym__`, drop=TRUE, lex.order=TRUE, sep='_'),
+                `__msfraction_sym__` = NULL)
+        }
+    }
+    if (!rlang::has_name(mschannels.df, "mschannel")) {
+        message("Generating MS channel IDs from ", paste0(mschannel_cols, collapse=", "))
+        if ("mstag" %in% mschannel_cols) {
+            mschannels.df <- dplyr::mutate(mschannels.df,
+                mschannel = interaction(msrun, mstag, drop=TRUE, lex.order=TRUE, sep='_'))
+        } else {
+            mschannels.df <- dplyr::mutate(mschannels.df, mschannel = msrun)
+        }
+    }
+    if (n_distinct(mschannels.df$mschannel) != nrow(mschannels.df)) {
+        stop('mschannel ids are not unique')
+    }
     mschannels.df <- dplyr::mutate(mschannels.df, quant_type = factor(quant_type))
+    msexperiments.df <- dplyr::select(mschannels.df, msexperiment_mq, msexperiment) %>% dplyr::distinct()
+    msruns.df <- dplyr::select(mschannels.df, -mschannel, -mstag, -quant_type) %>%
+                 dplyr::group_by(raw_file, msexperiment, msrun, msprotocol, msfraction, .drop="FALSE") %>%
+                 dplyr::filter(row_number() == 1L) %>% dplyr::ungroup()
     # NOTE?: the same mod. peptide Id can have multiple mod. sequences (mod at different poses)
     message('Enumerating pepmod states and summarizing channel intensities...')
-    intensities.mtx <- as.matrix(evidence.df[,dplyr::filter(intensity_columns.df, mstag != 'Sum')$old_name])
-    intens_cols <- intensity_columns.df$old_name
-    names(intens_cols) <- intensity_columns.df$new_name
+    intensities.mtx <- as.matrix(evidence.df[,dplyr::filter(intensity_columns.df, quant_type != 'aggregate')$old_name])
+    intens_cols <- rlang::set_names(intensity_columns.df$old_name, intensity_columns.df$new_name)
     evidence.df <- dplyr::mutate(evidence.df,
-                          pepmodstate_id = as.integer(interaction(pepmod_id, charge, drop = TRUE, lex.order = TRUE, sep = '_')),
-                          `Intensity Sum` = Matrix::rowSums(intensities.mtx, na.rm = TRUE),
                           n_quants = Matrix::rowSums(!is.na(intensities.mtx) & intensities.mtx > 0.0),
                           is_full_quant = !is.na(Matrix::rowSums(intensities.mtx > 0.0))) %>%
-        dplyr::rename(!!intens_cols)
+        dplyr::rename(!!intens_cols) %>%
+        dplyr::inner_join(dplyr::select(msruns.df, msexperiment, msrun, raw_file, msfraction, msprotocol),
+                          by=c("raw_file"))
 
-    message('Extracting pepmod states...')
-    pepmodstates.df <- dplyr::select(evidence.df, protgroup_ids, pepmodstate_id, pepmod_id, charge) %>%
-      dplyr::distinct() %>% dplyr::arrange(pepmodstate_id)
+    pepmodstate_cols <- c("pepmod_id", "charge")
+    if (any(!is.na(mschannels.df$msfraction))) {
+        message("MS data contains MS fractions, pepmodstate in different fractions get unique IDs")
+        pepmodstate_cols <- c(pepmodstate_cols, "msfraction")
+    }
+    message('Extracting pepmod states (', paste0(pepmodstate_cols, collapse=' X '), ')...')
+    pepmodstates.df <- dplyr::select(evidence.df, protgroup_ids, !!!syms(pepmodstate_cols)) %>%
+      dplyr::distinct() %>% dplyr::arrange_at(pepmodstate_cols) %>%
+      dplyr::mutate(pepmodstate_id = row_number())
+    evidence.df <- dplyr::left_join(evidence.df,
+                    dplyr::select(pepmodstates.df, pepmodstate_id, !!!syms(pepmodstate_cols)),
+                    by=pepmodstate_cols)
 
-    # summarize intensities for pepmodstate_id X msrun pair (there could be multiple ones)
+    # summarize intensities for pepmodstate_id X msexperiment pair (there could be multiple ones)
     message('Reshaping, summarizing & weighting pepmodstate intensities...')
     pms_intensities_long.df <- tidyr::pivot_longer(evidence.df, starts_with("intensity"), names_to="mstag", values_to="intensity", names_prefix="intensity.") %>%
         dplyr::mutate(mstag = factor(mstag, levels = levels(mschannels.df$mstag)),
                       mass_error_w = pmax(replace_na(abs(mass_error_ppm), 1000), 0.01)^(-0.5)) %>%
-        dplyr::inner_join(dplyr::select(mschannels.df, msrun, raw_file, mstag, mschannel)) %>%
-        dplyr::group_by(pepmod_id, pepmodstate_id, msrun, raw_file, mstag, mschannel) %>%
+        dplyr::inner_join(dplyr::select(mschannels.df, raw_file, mschannel, mstag), by=c("raw_file", "mstag")) %>%
+        dplyr::group_by(pepmod_id, pepmodstate_id, msexperiment, msfraction, mstag, msrun, mschannel, raw_file) %>%
         dplyr::summarise(weight = weighted.mean(intensity, mass_error_w),
                          intensity = sum(intensity, na.rm=TRUE)) %>%
         dplyr::group_by(pepmod_id, mschannel) %>%
@@ -603,28 +664,12 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
 
     message('Expanding intensities data.frame for every pepmod state and mschannel...')
     pms_full_intensities_long.df <- tidyr::expand(pms_intensities_long.df,
-                                                  nesting(raw_file, mschannel), pepmodstate_id) %>%
-        dplyr::left_join(dplyr::select(mschannels.df, mschannel, msrun, raw_file, any_of(c("mstag", "msprotocol")))) %>%
+                                                  nesting(msexperiment, raw_file, mschannel), pepmodstate_id) %>%
         dplyr::left_join(pepmodstates.df) %>%
         dplyr::left_join(pms_intensities_long.df) %>%
         dplyr::mutate(observed = !is.na(intensity) & intensity > 0,
                       weight = if_else(observed & is.finite(weight), weight, na_weight))
-    if (!("msprotocol" %in% colnames(pms_full_intensities_long.df))) {
-        pms_full_intensities_long.df$msprotocol <- "default"
-    }
 
-    if (evidence_pepobj == "pepmod") {
-      message('Summing intensities of different charges...')
-      full_intensities_long.df <- pms_full_intensities_long.df %>%
-          dplyr::group_by(pepmod_id, msrun, raw_file, mschannel, mstag) %>%
-          dplyr::summarise(intensity = sum(intensity, na.rm=TRUE))
-    } else {
-      full_intensities_long.df <- pms_full_intensities_long.df
-    }
-    full_intensities_long.df <- dplyr::ungroup(full_intensities_long.df) %>%
-          dplyr::mutate(intensity = if_else(intensity > 0, intensity, NA_real_))
-
-    message('Extracting pepmod information...')
     pepmodXmsrun_stats.df <- dplyr::mutate(evidence.df, has_quants = n_quants > 0) %>%
         dplyr::group_by(pepmod_id, msrun) %>%
         dplyr::summarize(n_charges = n_distinct(charge),
@@ -648,8 +693,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                                        "protein_acs", "lead_protein_acs", "lead_razor_protein_ac",
                                        "gene_names", "protein_names", "is_reverse", "is_contaminant",
                                        "mod_seq", "seq", "seq_len", "count_K", "count_R", "modifs", "n_miscleaved",
-                                       # Carbamidomethyl (C) site IDs', Oxidation (M) site IDs
-                                       "charge"))) %>%
+                                       "charge")),
+                                tidyselect::ends_with(" site IDs")) %>%
         dplyr::distinct() %>%
         dplyr::group_by(pepmod_id) %>%
         dplyr::mutate(charges = paste0(sort(charge), collapse=' ')) %>%
@@ -661,7 +706,7 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                       is_shared_by_proteins = str_detect(protein_acs, stringr::fixed(';')))
 
     message( 'Extracting peaks information...' )
-    peak_columns <- c('pepmodstate_id', 'pepmod_id', 'charge', 'msrun', 'raw_file', 'evidence_id', 'n_quants', 'is_full_quant',
+    peak_columns <- c('pepmodstate_id', 'pepmod_id', 'charge', 'msexperiment', 'msrun', 'msfraction', 'raw_file', 'evidence_id', 'n_quants', 'is_full_quant',
                       # Carbamidomethyl (C) Probabilities, Oxidation (M) Probabilities, Carbamidomethyl (C) Score Diffs, Oxidation (M) Score Diffs, Acetyl (Protein N-term), Carbamidomethyl (C), Oxidation (M),
                       'ident_type', 'label_state', 'ms2_mz', 'mz', 'mass_da', 'resolution',
                       'delta_mz_ppm', 'delta_mz_da', 'mass_error_ppm', 'Mass Error [mDa]', 'Mass Error [Da]',
@@ -676,8 +721,8 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
     peaks.df <- evidence.df %>% dplyr::select(!!peak_columns) %>% dplyr::distinct()
 
     ratio_columns.df <- tidyr::expand_grid(measure = 'ratio',
-                                 mstag_nom = unique(dplyr::filter(intensity_columns.df, type == 'measured')$mstag),
-                                 mstag_denom = unique(dplyr::filter(intensity_columns.df, type == 'measured')$mstag),
+                                 mstag_nom = unique(dplyr::filter(intensity_columns.df, quant_type != 'aggregate')$mstag),
+                                 mstag_denom = unique(dplyr::filter(intensity_columns.df, quant_type != 'aggregate')$mstag),
                                  type = c('', 'normalized', 'shift')) %>%
         dplyr::filter(("ratio" %in% import_data) & mstag_nom != mstag_denom) %>%
         dplyr::mutate(old_name = str_replace(paste0('Ratio ', mstag_nom, '/', mstag_denom, ' ', type), '\\s$', ''),
@@ -687,20 +732,12 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                       exists = old_name %in% colnames(evidence.df),
                       inverted_exists = inverted_old_name %in% colnames(evidence.df))
 
-    message('Converting intensities to ', evidence_msobj, ' row format...')
-    if (evidence_msobj == 'mschannel') {
-        #print(str(intensities.df))
-        intensities.df <- full_intensities_long.df %>% dplyr::filter(observed) %>%
-            dplyr::mutate(mstag = factor(mstag, levels = as.character(intensity_columns.df$mstag)))
-    } else if (evidence_msobj == 'msrun') {
-        intensities.df <- full_intensities_long.df %>% ungroup() %>% select(-mschannel) %>%
-          tidyr::pivot_wider(id_cols=c("pepmod_id", "pepmodstate_id", "msrun", "raw_file"),
-                             names_from=mstag,
-                             values_from=starts_with("intensity"), names_sep=".")
-    }
-    ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmodstate_id, msrun, raw_file, ident_type)) %>%
+    message('Converting intensities to row format...')
+    intensities.df <- pms_full_intensities_long.df %>% dplyr::filter(observed) %>%
+        dplyr::mutate(mstag = factor(mstag, levels = as.character(intensity_columns.df$mstag)))
+    ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmodstate_id, msexperiment, msrun, raw_file, ident_type)) %>%
         dplyr::mutate(ident_type_i = as_integer(ident_type)) %>%
-        dplyr::group_by(pepmodstate_id, msrun, raw_file) %>%
+        dplyr::group_by(pepmodstate_id, msexperiment, msrun, raw_file) %>%
         dplyr::summarise(ident_type_i = min(ident_type_i, na.rm = TRUE)) %>%
         dplyr::ungroup() %>%
         dplyr::mutate(ident_type = factor(levels(peaks.df$ident_type)[ident_type_i], levels=levels(peaks.df$ident_type)),
@@ -723,14 +760,12 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
         ratios.df[,dplyr::filter(ratio_columns_sel.df,!exists)$new_name] <- NA_real_ # add missing column names to make it evidence.df hapeable
         # fix NA
         ratios.df <- ratios.df %>% dplyr::mutate_at(ratio_columns_sel.df$new_name, zero2na)
-        if (evidence_msobj == 'mschannel') {
-            message('Converting ratios to long format...')
-            ratio_cols <- str_c("ratio.", ratio_columns_sel.df$suffix)
-            ratios.df <- tidyr::pivot_longer(select(ratios.df, !!id_cols, !!ratio_cols), cols=cols(ratio_cols),
-                                             names_to='ratio_type', names_prefix="ratio.") %>%
-                dplyr::inner_join(dplyr::select(ratio_columns_sel.df, suffix, type, mstag_nom, mstag_denom),
-                                  by = c("ratio_type" = "suffix"))
-        }
+        message('Converting ratios to long format...')
+        ratio_cols <- str_c("ratio.", ratio_columns_sel.df$suffix)
+        ratios.df <- tidyr::pivot_longer(select(ratios.df, !!id_cols, !!ratio_cols), cols=cols(ratio_cols),
+                                            names_to='ratio_type', names_prefix="ratio.") %>%
+            dplyr::inner_join(dplyr::select(ratio_columns_sel.df, suffix, type, mstag_nom, mstag_denom),
+                                by = c("ratio_type" = "suffix"))
     } else {
         message('No channel ratios')
         ratios.df <- NULL
@@ -741,28 +776,25 @@ process.MaxQuant.Evidence <- function( evidence.df, evidence.pepobj = c("pepmod"
                                       protgroup_id = as.integer(unlist(protgroups2protgroup.list)))
     res <- list(pepmods = pepmods.df,
                 protgroups2protgroup = protgroups2protgroup.df,
-                raw_files = msruns.df,
+                raw_files = raw_files.df,
+                msexperiments = msexperiments.df,
+                msruns = msruns.df,
                 mschannels = mschannels.df,
-                peaks = peaks.df)
-    res[[paste0(evidence_pepobj, "_intensities")]] <- intensities.df
-    res[[paste0(evidence_pepobj, "_ratios")]] <- ratios.df
-    if (evidence_pepobj == "pepmodstate") {
-        res$pepmodstates <- pepmodstates.df
-    }
+                peaks = peaks.df,
+                pepmodstate_intensities = intensities.df,
+                pepmodstate_ratios = ratios.df,
+                pepmodstates = pepmodstates.df)
+
     return (res)
 }
 
 #' @export
 read.MaxQuant.Evidence <- function(folder_path, file_name = 'evidence.txt',
-                                   evidence.pepobj = c("pepmod", "pepmodstate"),
-                                   evidence.msobj = c("msrun", "mschannel"),
                                    nrows = Inf, guess_max = min(10000L, nrows),
-                                   mode = c("labeled", "label-free"), mschannel_annotate.f = NULL)
+                                   mschannel_annotate.f = NULL)
 {
     process.MaxQuant.Evidence(read.MaxQuant.Evidence_internal(
         folder_path = folder_path, file_name = file_name, nrows = nrows, guess_max=guess_max),
-        evidence.pepobj = evidence.pepobj, evidence.msobj = evidence.msobj,
-        mode = mode,
         mschannel_annotate.f = mschannel_annotate.f,
         multidplyr_cluster = multidplyr_cluster)
 }
