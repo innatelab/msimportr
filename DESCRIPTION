@@ -1,7 +1,7 @@
 Package: maxquantUtils
 Type: Package
 Title: MaxQuant files import
-Version: 0.1.0
+Version: 0.2.0
 Author: Alexey Stukalov
 Maintainer: Alexey Stukalov <alexey.stukalov@tum.de>
 Description: MaxQuant output files (.txt tables) import and post-processing.
