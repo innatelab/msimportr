@@ -629,13 +629,18 @@ process.MaxQuant.Evidence <- function( evidence.df,
     intensities.mtx <- as.matrix(evidence.df[,dplyr::filter(intensity_columns.df, quant_type != 'aggregate')$old_name])
     intens_cols <- rlang::set_names(intensity_columns.df$old_name, intensity_columns.df$new_name)
     evidence.df <- dplyr::mutate(evidence.df,
+                          pepmod_id_mq = pepmod_id,
+                          # MaxQuant has strange way of indexing modified peptides with PTM
+                          # that don't take into account the position of the modification
+                          # redefine the pepmod_id based on the pepmod_seq
+                          pepmod_id = match(pepmod_seq, unique(pepmod_seq)) - 1L,
                           n_quants = Matrix::rowSums(!is.na(intensities.mtx) & intensities.mtx > 0.0),
                           is_full_quant = !is.na(Matrix::rowSums(intensities.mtx > 0.0))) %>%
         dplyr::rename(!!intens_cols) %>%
         dplyr::inner_join(dplyr::select(msruns.df, msexperiment, msrun, raw_file, msfraction, msprotocol),
                           by=c("raw_file"))
 
-    pepmodstate_cols <- c("pepmod_id", "charge")
+    pepmodstate_cols <- c("pepmod_id", "pepmod_id_mq", "charge")
     if (any(!is.na(mschannels.df$msfraction))) {
         message("MS data contains MS fractions, pepmodstate in different fractions get unique IDs")
         pepmodstate_cols <- c(pepmodstate_cols, "msfraction")
@@ -689,7 +694,7 @@ process.MaxQuant.Evidence <- function( evidence.df,
         dplyr::ungroup()
 
     pepmods.df <- dplyr::select(evidence.df,
-                                any_of(c("pepmod_id", "peptide_id", "protgroup_ids",
+                                any_of(c("pepmod_id", "pepmod_id_mq", "peptide_id", "protgroup_ids",
                                        "protein_acs", "lead_protein_acs", "lead_razor_protein_ac",
                                        "gene_names", "protein_names", "is_reverse", "is_contaminant",
                                        "pepmod_seq", "peptide_seq", "peptide_len", "count_K", "count_R", "modifs", "n_miscleaved",
