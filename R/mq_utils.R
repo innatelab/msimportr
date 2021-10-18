@@ -532,6 +532,7 @@ process.MaxQuant.Evidence <- function( evidence.df,
                           by="mstag")
     message("Data contains ", nrow(mschannels.df), " mschannel(s)")
     if (!is.null(mschannel_annotate.f)) {
+        message("Requesting user-defined MS channel annotations...")
         # get user-defined mschannel annotations
         annot.df <- mschannel_annotate.f(mschannels.df)
         checkmate::assert_data_frame(annot.df)
@@ -553,14 +554,14 @@ process.MaxQuant.Evidence <- function( evidence.df,
                                     as.character(mschannels.df$raw_file))
         mschannels.df <- mschannels_annot.df
         if (rlang::has_name(mschannels.df, 'is_skipped')) {
-            message('Skipping ', sum(mschannels.df$is_skipped, na.rm=TRUE),
+            message('  * skipping ', sum(mschannels.df$is_skipped, na.rm=TRUE),
                     ' of ', nrow(mschannels.df), ' mschannels(s) excluded by user')
             mschannels.df <- dplyr::filter(mschannels.df, !dplyr::coalesce(is_skipped, FALSE))
-            evidence.df <- dplyr::filter(evidence.df, raw_file %in% mschannels.df$raw_file)
             # drop unused levels
             mschannels.df <- dplyr::mutate_at(mschannels.df,
                     vars(any_of(c("msexperiment_mq", "msexperiment", "msrun", "mschannel", "raw_file"))),
                     ~factor(., levels=unique(as.character(.))))
+            evidence.df <- dplyr::filter(evidence.df, raw_file %in% mschannels.df$raw_file)
             evidence.df <- dplyr::mutate(evidence.df,
                     raw_file = factor(raw_file, levels=levels(mschannels.df$raw_file)),
                     msexperiment_mq = factor(msexperiment_mq, levels=levels(mschannels.df$msexperiment_mq)))
