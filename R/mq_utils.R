@@ -688,14 +688,7 @@ process.MaxQuant.Evidence <- function( evidence.df,
         dplyr::ungroup() %>%
         dplyr::mutate(intensity = if_else(!is.na(intensity) & intensity>0, intensity, NA_real_))
 
-    message('Expanding intensities data.frame for every pepmod state and mschannel...')
-    pms_full_intensities_long.df <- tidyr::expand(pms_intensities_long.df,
-                                                  nesting(msexperiment, raw_file, mschannel), pepmodstate_id) %>%
-        dplyr::left_join(pepmodstates.df) %>%
-        dplyr::left_join(pms_intensities_long.df) %>%
-        dplyr::mutate(observed = !is.na(intensity) & intensity > 0,
-                      weight = if_else(observed & is.finite(weight), weight, na_weight))
-
+    message('Extracting pepmod information...')
     pepmodXmsrun_stats.df <- dplyr::mutate(evidence.df, has_quants = n_quants > 0) %>%
         dplyr::group_by(pepmod_id, msrun) %>%
         dplyr::summarize(n_charges = n_distinct(charge),
@@ -759,7 +752,7 @@ process.MaxQuant.Evidence <- function( evidence.df,
                       inverted_exists = inverted_old_name %in% colnames(evidence.df))
 
     message('Converting intensities to row format...')
-    intensities.df <- pms_full_intensities_long.df %>% dplyr::filter(observed) %>%
+    intensities.df <- pms_intensities_long.df %>%
         dplyr::mutate(mstag = factor(mstag, levels = as.character(intensity_columns.df$mstag)))
     ident_types.df <- dplyr::distinct(dplyr::select(peaks.df, pepmodstate_id, msexperiment, msrun, raw_file, ident_type)) %>%
         dplyr::mutate(ident_type_i = as_integer(ident_type)) %>%
