@@ -524,7 +524,7 @@ process.MaxQuant.Evidence <- function( evidence.df,
         dplyr::arrange(mstag) %>%
         # restrict to the labels actually used
         dplyr::mutate(mstag = factor(mstag, levels=as.character(unique(mstag))))
-    rawfiles.df <- dplyr::select(evidence.df, rawfile, msexperiment_mq, msfraction_mq) %>% dplyr::distinct()
+    rawfiles.df <- dplyr::select(evidence.df, rawfile, msexperiment_mq, any_of("msfraction_mq")) %>% dplyr::distinct()
     mschannels.df <- tidyr::expand_grid(rawfile = unique(evidence.df$rawfile),
                                         mstag = unique(intensity_columns.df$mstag)) %>%
         dplyr::inner_join(rawfiles.df, by="rawfile") %>%
@@ -595,8 +595,11 @@ process.MaxQuant.Evidence <- function( evidence.df,
     if (rlang::has_name(mschannels.df, "msfraction")) {
         message('Overriding MaxQuant fraction IDs (msfraction)')
         mschannel_cols <- c(mschannel_cols, "msfraction")
-    } else {
+    } else if (rlang::has_name(mschannels.df, "msfraction_mq")) {
         mschannels.df <- dplyr::mutate(mschannels.df, msfraction = msfraction_mq)
+    } else {
+        mschannels.df <- dplyr::mutate(mschannels.df, msfraction_mq = NA_integer_,
+                                                      msfraction = NA_integer_)
     }
     if (any(intensity_columns.df$quant_type == 'SILAC')) {
         message('Evidence table contains SILAC-labeled data')
@@ -608,7 +611,8 @@ process.MaxQuant.Evidence <- function( evidence.df,
     }
     if (!rlang::has_name(mschannels.df, "msrun")) {
         message("No MS runs specified, Generating IDs")
-        if (!rlang::has_name(mschannels.df, "msfraction")) {
+        if (!rlang::has_name(mschannels.df, "msfraction")
+         || all(is.na(mschannels.df$msfraction))) {
             message("Assuming msrun=msexperiment")
             mschannels.df <- dplyr::mutate(mschannels.df, msrun = msexperiment)
         } else {
